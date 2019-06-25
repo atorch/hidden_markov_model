@@ -321,7 +321,7 @@ def get_observation_df_Y_S(simulation_type, years, simulation_params):
     marginal_df = marginal_df.fillna(value=0.0)
 
     # Note: the set of hidden states can be smaller than the set of observations
-    S_sorted = [x for x in Y_sorted if x not in OBSERVATIONS_TO_EXCLUDE_FROM_S]
+    S_sorted = np.array([x for x in Y_sorted if x not in OBSERVATIONS_TO_EXCLUDE_FROM_S])
 
     return df, Y_sorted, S_sorted
 
@@ -554,7 +554,7 @@ def run_hmm_estimation(
 
             print(
                 "running viterbi on raster data using {} estimates, time is {}".format(
-                    algorithm, datetime.datetime.now()
+                    algorithm, dt.datetime.now()
                 )
             )
 
@@ -570,7 +570,7 @@ def run_hmm_estimation(
                 pr_transition_hat_list,
             )  # TODO Pass model parameters as a dictionary
 
-            print(" done running viterbi, time is {}".format(datetime.datetime.now()))
+            print(" done running viterbi, time is {}".format(dt.datetime.now()))
             assert len(df) == len(viterbi_paths_df)
             df_with_viterbi = pd.concat([df, viterbi_paths_df], axis=1)
             assert len(df_with_viterbi) == len(df)

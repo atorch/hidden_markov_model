@@ -20,7 +20,7 @@ def get_crosstab(dataset, df, Y_sorted, year_from=2012, third_period_land_use=No
 
     ## Careful with Y_sorted order: need crosstab to follow identical order in both rows and columns
     year_to = year_from + 1
-    
+
     varname_from = get_observation_colname(year_from)
     varname_to = get_observation_colname(year_to)
 

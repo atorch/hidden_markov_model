@@ -632,19 +632,25 @@ def get_viterbi_df(
     viterbi_path_list = list()
 
     for i in range(len(df)):
+
         observations = tuple(
             df.iloc[i][observation_cols].tolist()
         )  # Tuples can be used as dictionary keys
+
         if observations in list(map_observations_to_viterbi.keys()):
             viterbi_path_list.append(map_observations_to_viterbi[observations])
+
         else:
+
+            viterbi_indices = get_viterbi(
+                observations=observations,
+                upsilon=upsilon,
+                initial_distribution=initial_distribution,
+                pr_transition_list=pr_transition_list,
+            )
+
             viterbi_land_uses = S_sorted[
-                get_viterbi(
-                    observations=observations,
-                    upsilon=upsilon,
-                    initial_distribution=initial_distribution,
-                    pr_transition_list=pr_transition_list,
-                )
+                viterbi_indices
             ]
             viterbi_path_list.append(viterbi_land_uses)
             map_observations_to_viterbi.update({observations: viterbi_land_uses})
