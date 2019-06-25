@@ -11,20 +11,28 @@ import os
 import pandas as pd
 
 
+def get_observation_colname(year):
+
+    return f"observation_{year}"
+
+
 def get_crosstab(dataset, df, Y_sorted, year_from=2012, third_period_land_use=None):
 
     ## Careful with Y_sorted order: need crosstab to follow identical order in both rows and columns
     year_to = year_from + 1
-    varname_from = "{}_{}".format(dataset, year_from)
-    varname_to = "{}_{}".format(dataset, year_to)
+    
+    varname_from = get_observation_colname(year_from)
+    varname_to = get_observation_colname(year_to)
+
     assert varname_from in df.columns and varname_to in df.columns
+
     if third_period_land_use is None:
         crosstab = pd.crosstab(
             df[varname_to], df[varname_from]
         )  # Careful: year_to along rows
 
     else:
-        varname_third_period = "{}_{}".format(dataset, year_to + 1)
+        varname_third_period = get_observation_colname(year_to + 1)
         df_subset = df.loc[df[varname_third_period] == third_period_land_use]
         if len(df_subset) == 0:
             ## Third period land use is never observed: crosstab is empty (all zeros)
@@ -158,35 +166,12 @@ def is_valid_upsilon(upsilon, Y_sorted, S_sorted):
     )
 
 
-def get_directory(
-    dataset, years, aoi_width, aoi_height, aoi_x_min=None, aoi_y_min=None
-):
-    if "simulation" in dataset:
-        ## No AOI coordinates for simulation, but width and height control sample size
-        format_string = "{}_{}_to_{}_width_{}_height_{}"
-        return format_string.format(
-            dataset, min(years), max(years), aoi_width, aoi_height
-        )
-    else:
-        format_string = "{}_{}_to_{}_x_min_{}_width_{}_y_min_{}_height_{}"
-        return format_string.format(
-            dataset, min(years), max(years), aoi_x_min, aoi_width, aoi_y_min, aoi_height
-        )
+def get_directory(dataset, years):
+    return f"{dataset}_{min(years)}_to_{max(years)}"
 
 
-def get_outfile(
-    dataset,
-    years,
-    aoi_width,
-    aoi_height,
-    aoi_x_min,
-    aoi_y_min,
-    parent_directory,
-    filename,
-):
-    subdirectory = get_directory(
-        dataset, years, aoi_width, aoi_height, aoi_x_min, aoi_y_min
-    )
+def get_outfile(dataset, years, parent_directory, filename):
+    subdirectory = get_directory(dataset, years)
     if not os.path.exists(parent_directory):
         os.makedirs(parent_directory)
 
@@ -207,10 +192,6 @@ def plot_pr_transition(
     pr_transition_truth_list,  # Only known for simulation
     land_use_from,
     land_use_to=None,
-    aoi_x_min=None,
-    aoi_width=None,
-    aoi_y_min=None,
-    aoi_height=None,
     linewidth=5.0,
     marker_size=14.0,
     text_size=18.0,
@@ -311,16 +292,7 @@ def plot_pr_transition(
     filename = "{}_pr_transition_{}_to_{}.png".format(
         algorithm.replace(" ", "_"), land_use_from, land_use_to
     )
-    outfile = get_outfile(
-        dataset,
-        years,
-        aoi_width,
-        aoi_height,
-        aoi_x_min,
-        aoi_y_min,
-        plot_directory,
-        filename,
-    )
+    outfile = get_outfile(dataset, years, plot_directory, filename)
     print(" saving {}".format(outfile))
     plt.savefig(outfile)
     plt.close("all")

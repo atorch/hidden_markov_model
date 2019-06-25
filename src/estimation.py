@@ -1,8 +1,7 @@
 import datetime as dt
+from functools import partial
 import numpy as np
 import pandas as pd
-
-from functools import partial
 from scipy import optimize
 from scipy.special import expit
 from scipy.special import logit
@@ -358,8 +357,10 @@ def get_em_parameter_estimates(
     pr_transition_hat_list,
     max_iterations=10,
 ):
+
     print("running EM estimation, time is {}".format(dt.datetime.now()))
-    observation_cols = ["{}_{}".format(dataset, year) for year in years]
+    observation_cols = [utils.get_observation_colname(year) for year in years]
+
     for iteration in range(max_iterations):
         baum_welch_arrays = get_baum_welch_arrays(
             df,

@@ -1,5 +1,7 @@
 # Hidden Markov Model Simulations
 
+Install docker and then run the following:
+
 ```bash
 export DOCKER_TAG=hidden_markov_model_docker
 sudo docker build ~/hidden_markov_model --tag=$DOCKER_TAG
