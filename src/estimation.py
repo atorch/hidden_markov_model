@@ -649,9 +649,7 @@ def get_viterbi_df(
                 pr_transition_list=pr_transition_list,
             )
 
-            viterbi_land_uses = S_sorted[
-                viterbi_indices
-            ]
+            viterbi_land_uses = S_sorted[viterbi_indices]
             viterbi_path_list.append(viterbi_land_uses)
             map_observations_to_viterbi.update({observations: viterbi_land_uses})
 

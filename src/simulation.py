@@ -12,11 +12,17 @@ from estimation import (
 )
 import utils
 
-SIMULATION_CORN_SOY = "simulation_corn_soy"
-SIMULATION_SIMPLE = "simulation_simple"
-SIMULATION_TIME_VARYING = "simulation_time_varying"
+SIMULATION_CORN_SOY = "corn_soy_rotation"
+SIMULATION_SIMPLE_TWO_STATES = "simple_two_states"
+SIMULATION_SIMPLE_THREE_STATES = "simple_three_states"
+SIMULATION_TIME_VARYING = "time_varying"
 
-SIMULATIONS = [SIMULATION_CORN_SOY, SIMULATION_SIMPLE, SIMULATION_TIME_VARYING]
+SIMULATIONS = [
+    SIMULATION_CORN_SOY,
+    SIMULATION_SIMPLE_TWO_STATES,
+    SIMULATION_SIMPLE_THREE_STATES,
+    SIMULATION_TIME_VARYING,
+]
 
 OBSERVATIONS_TO_EXCLUDE_FROM_S = ["not_observed"]
 
@@ -33,31 +39,61 @@ def get_simulation_params(simulation_type, years):
         upsilon = utils.get_simple_upsilon(
             Y_sorted, S_sorted, diag_probabilities=[0.85, 0.95, 0.80, 0.85]
         )
+
+        # Note: this simulates land cover with a corn-soy rotation
+        # Corn has a high probability of transitioning to soy, and vice-versa
         pr_transition = pd.DataFrame(
             np.array(
                 [
-                    [0.05, 0.01, 0.04, 0.90],  # Transitions from corn
-                    [0.01, 0.95, 0.03, 0.01],  # Transitions from forest
-                    [0.02, 0.01, 0.95, 0.02],  # Transitions from pasture
+                    [0.05, 0.01, 0.04, 0.90],
+                    [0.01, 0.95, 0.03, 0.01],
+                    [0.02, 0.01, 0.95, 0.02],
                     [0.75, 0.01, 0.04, 0.20],
                 ]
             )
-        )  # Transitions from soy
+        )
         pr_transition.index = S_sorted
         pr_transition.columns = S_sorted
         pr_transition_list = [pr_transition] * (len(years) - 1)
 
-    elif simulation_type == SIMULATION_SIMPLE:
+    elif simulation_type == SIMULATION_SIMPLE_TWO_STATES:
 
+        # Note: the set of observations and the set of hidden states are identical in this simulation
+        Y_sorted = np.sort(["crops", "forest"])
+        S_sorted = Y_sorted
+
+        initial_distribution = np.array([0.30, 0.70])
+        upsilon = utils.get_simple_upsilon(
+            Y_sorted, S_sorted, diag_probabilities=[0.9, 0.95]
+        )
+        assert utils.is_valid_upsilon(upsilon, Y_sorted, S_sorted)
+
+        # Note: the transition probabilities have large entries on the diagonals (land cover is persistent)
+        pr_transition = pd.DataFrame(np.array([[0.9, 0.1], [0.05, 0.95]]))
+        pr_transition.index = S_sorted
+        pr_transition.columns = S_sorted
+        pr_transition_list = [pr_transition] * (len(years) - 1)
+
+    elif simulation_type == SIMULATION_SIMPLE_THREE_STATES:
+
+        # Note: this simulation has three hidden states and four possible observations
         Y_sorted = np.sort(["crops", "forest", "pasture", "not_observed"])
         S_sorted = np.sort(["crops", "forest", "pasture"])
+
         initial_distribution = np.array([0.10, 0.60, 0.30])
+
         upsilon = utils.get_simple_upsilon(
             Y_sorted, S_sorted, diag_probabilities=[0.85, 0.90, 0.95]
         )
+
+        # Note: get_simple_upsilon places probabilities uniformly on the off-diagonals
+        # Put higher probablity on upsilon.iloc[2, 0] to make things more interesting
         upsilon.iloc[2, 0] = upsilon.iloc[2, 0] + upsilon.iloc[3:, 0].sum()
         upsilon.iloc[3:, 0] = 0.0
+
         assert utils.is_valid_upsilon(upsilon, Y_sorted, S_sorted)
+
+        # Note: the transition probabilities have large entries on the diagonals (land cover is persistent)
         pr_transition = pd.DataFrame(
             np.array([[0.90, 0.01, 0.09], [0.01, 0.95, 0.04], [0.10, 0.05, 0.85]])
         )
@@ -73,27 +109,18 @@ def get_simulation_params(simulation_type, years):
         upsilon = utils.get_simple_upsilon(
             Y_sorted, S_sorted, diag_probabilities=[0.95, 0.80, 0.70]
         )
-        ## Time varying transition probabilities: one matrix in even years, another matrix in odd years
+
+        # Note: the hidden state transition probabilities are time-varying in this simulation
+        # There is one transition probability matrix in even years (periods), and another matrix in odd years
+        # In both cases, hidden states are fairly persistent (large probabilities on the diagonals)
         pr_transition_even = pd.DataFrame(
-            np.array(
-                [
-                    [0.96, 0.03, 0.01],  # Transitions from forest
-                    [0.01, 0.95, 0.04],  # Transitions from pasture
-                    [0.01, 0.04, 0.95],
-                ]
-            )
+            np.array([[0.96, 0.03, 0.01], [0.01, 0.95, 0.04], [0.01, 0.04, 0.95]])
         )  # Transitions from soy
         pr_transition_even.index = S_sorted
         pr_transition_even.columns = S_sorted
         pr_transition_odd = pd.DataFrame(
-            np.array(
-                [
-                    [0.90, 0.09, 0.01],  # Transitions from forest
-                    [0.01, 0.98, 0.01],  # Transitions from pasture
-                    [0.01, 0.09, 0.90],
-                ]
-            )
-        )  # Transitions from soy
+            np.array([[0.90, 0.09, 0.01], [0.01, 0.98, 0.01], [0.01, 0.09, 0.90]])
+        )
         pr_transition_odd.index = S_sorted
         pr_transition_odd.columns = S_sorted
         pr_transition_list = [
@@ -112,7 +139,7 @@ def get_simulation_params(simulation_type, years):
     return simulation_params
 
 
-def get_observation_df_Y_sorted(simulation_type, params, years):
+def get_observation_df_Y_sorted(simulation_type, params, n_pixels, years):
 
     initial_distribution = params["initial_distribution"]
     pr_transition_list = params["pr_transition_list"]
@@ -122,7 +149,6 @@ def get_observation_df_Y_sorted(simulation_type, params, years):
     assert utils.is_valid_years(years)
     assert utils.is_valid_initial_distribution(initial_distribution, S_sorted)
 
-    # Note: to increase sample size, increase width and height
     df = simulate_land_cover_df(
         simulation_type,
         Y_sorted=Y_sorted,
@@ -130,6 +156,7 @@ def get_observation_df_Y_sorted(simulation_type, params, years):
         initial_distribution=initial_distribution,
         pr_transition_list=pr_transition_list,
         upsilon=upsilon,
+        n_pixels=n_pixels,
         years=years,
     )
 
@@ -262,8 +289,8 @@ def simulate_land_cover_df(
     initial_distribution,
     pr_transition_list,
     upsilon,
+    n_pixels,
     years=list(range(2010, 2017)),
-    n_pixels=1000,
 ):
 
     # Simulation where true parameters are known, for sanity checking estimation code
@@ -294,10 +321,10 @@ def simulate_land_cover_df(
     return pd.DataFrame(rows)
 
 
-def get_observation_df_Y_S(simulation_type, years, simulation_params):
+def get_observation_df_Y_S(simulation_type, n_pixels, years, simulation_params):
 
     df, Y_sorted = get_observation_df_Y_sorted(
-        simulation_type, simulation_params, years
+        simulation_type, simulation_params, n_pixels, years
     )
 
     print(
@@ -321,13 +348,15 @@ def get_observation_df_Y_S(simulation_type, years, simulation_params):
     marginal_df = marginal_df.fillna(value=0.0)
 
     # Note: the set of hidden states can be smaller than the set of observations
-    S_sorted = np.array([x for x in Y_sorted if x not in OBSERVATIONS_TO_EXCLUDE_FROM_S])
+    S_sorted = np.array(
+        [x for x in Y_sorted if x not in OBSERVATIONS_TO_EXCLUDE_FROM_S]
+    )
 
     return df, Y_sorted, S_sorted
 
 
 def run_hmm_estimation(
-    simulation_type, years, initial_pr_transition_diagonal, verbose=1
+    simulation_type, n_pixels, years, initial_pr_transition_diagonal, verbose=1
 ):
 
     assert len(years) >= 3, "Need at least 3 years of data to estimate HMM"
@@ -335,7 +364,7 @@ def run_hmm_estimation(
     simulation_params = get_simulation_params(simulation_type, years)
 
     df, Y_sorted, S_sorted = get_observation_df_Y_S(
-        simulation_type, years, simulation_params=simulation_params
+        simulation_type, n_pixels, years, simulation_params=simulation_params
     )
 
     assert len(Y_sorted) >= len(S_sorted) > 1
@@ -371,107 +400,75 @@ def run_hmm_estimation(
                 )
             )
 
-    if not os.path.exists("./pickles"):
-        os.makedirs("./pickles")
-
-    pickle_outfile = utils.get_outfile(
-        simulation_type,
-        years,
-        parent_directory="./pickles",
-        filename="estimated_parameters.pickle",
+    initial_upsilon = utils.get_simple_upsilon(
+        Y_sorted, S_sorted, diag_probabilities=0.95 * np.ones((len(S_sorted),))
     )
 
-    if os.path.isfile(pickle_outfile):
-        print(
-            "{} already exists: will load pickle instead of re-running estimation".format(
-                pickle_outfile
-            )
-        )
-        estimates = pickle.load(open(pickle_outfile, "rb"))
+    off_diagonal = np.logical_not(np.eye(len(S_sorted), dtype=bool))
+    initial_pr_transition = np.diag(
+        initial_pr_transition_diagonal * np.ones((len(S_sorted),))
+    )
+    initial_pr_transition[off_diagonal] = (1 - initial_pr_transition_diagonal) / (
+        len(S_sorted) - 1
+    )
+    initial_pr_transition_list = [initial_pr_transition] * (len(years) - 1)
+    assert utils.is_valid_pr_transition_list(
+        initial_pr_transition_list, S_sorted, years
+    )
+    initial_initial_distribution = np.ones((len(S_sorted),)) / float(
+        len(S_sorted)
+    )  # TODO initial_distrib_guess?
 
-    else:
-        ## TODO Try eigenvalue decomp for initial values?
-        initial_upsilon = utils.get_simple_upsilon(
-            Y_sorted, S_sorted, diag_probabilities=0.95 * np.ones((len(S_sorted),))
-        )
+    ## TODO Also run EM estimates with constraints (e.g. Pr[Y = crops_or_pasture | S = old_forest] = 0), or transitions
+    estimates_em = get_em_parameter_estimates(
+        simulation_type,
+        df,
+        Y_sorted,
+        S_sorted,
+        years,
+        initial_upsilon,
+        initial_initial_distribution,
+        initial_pr_transition_list,
+    )
 
-        # if 'crops_or_pasture' in Y_sorted and ('crops' in S_sorted or 'pasture' in S_sorted):
-        #     pdb.set_trace()  # initial_upsilon.loc[np.logical_not(initial_upsilon.index == 'crops_or_pasture'), 'pasture']
-        #     initial_upsilon  # TODO Set large initial Pr[ Y=crops_or_pasture | S=pasture ] ?
+    x_initial = np.hstack(
+        [initial_initial_distribution]
+        + [pr_transition.flatten() for pr_transition in initial_pr_transition_list]
+        + [initial_upsilon.values.flatten()]
+    )
+    third_period_land_uses = (
+        Y_sorted
+    )  # Optimization seems to work better when using more third period land uses
 
-        ## TODO utils.get_simple_pr_transition
-        off_diagonal = np.logical_not(np.eye(len(S_sorted), dtype=bool))
-        initial_pr_transition = np.diag(
-            initial_pr_transition_diagonal * np.ones((len(S_sorted),))
-        )
-        initial_pr_transition[off_diagonal] = (1 - initial_pr_transition_diagonal) / (
-            len(S_sorted) - 1
-        )
-        initial_pr_transition_list = [initial_pr_transition] * (len(years) - 1)
-        assert utils.is_valid_pr_transition_list(
-            initial_pr_transition_list, S_sorted, years
-        )
-        initial_initial_distribution = np.ones((len(S_sorted),)) / float(
-            len(S_sorted)
-        )  # TODO initial_distrib_guess?
+    estimates_min_dist = get_minimum_distance_parameter_estimates(
+        simulation_type,
+        df,
+        Y_sorted,
+        S_sorted,
+        years,
+        x_initial=x_initial,
+        third_period_land_uses=third_period_land_uses,
+        max_iterations=300,
+    )
 
-        ## TODO Also run EM estimates with constraints (e.g. Pr[Y = crops_or_pasture | S = old_forest] = 0), or transitions
-        estimates_em = get_em_parameter_estimates(
-            simulation_type,
-            df,
-            Y_sorted,
-            S_sorted,
-            years,
-            initial_upsilon,
-            initial_initial_distribution,
-            initial_pr_transition_list,
-        )
-
-        x_initial = np.hstack(
-            [initial_initial_distribution]
-            + [pr_transition.flatten() for pr_transition in initial_pr_transition_list]
-            + [initial_upsilon.values.flatten()]
-        )
-        third_period_land_uses = (
-            Y_sorted
-        )  # Optimization seems to work better when using more third period land uses
-        estimates_min_dist = get_minimum_distance_parameter_estimates(
-            simulation_type,
-            df,
-            Y_sorted,
-            S_sorted,
-            years,
-            x_initial=x_initial,
-            third_period_land_uses=third_period_land_uses,
-            max_iterations=300,
-        )  # TODO Argument
-        print(
-            "saving estimated parameters (both EM and minimum distance) to {}".format(
-                pickle_outfile
-            )
-        )
-        estimates = {"minimum distance": estimates_min_dist, "EM": estimates_em}
-        pickle.dump(estimates, open(pickle_outfile, "wb"))
+    estimates = {"minimum distance": estimates_min_dist, "EM": estimates_em}
 
     for algorithm in list(estimates.keys()):
+
         initial_distribution_hat, pr_transition_hat_list, upsilon_hat = estimates[
             algorithm
         ]
+
         for index in range(len(years) - 1):
             print(
-                "{} transition probabilities, {} to {}:".format(
-                    algorithm, years[index], years[index + 1]
-                )
+                f"{algorithm} transition probabilities, {years[index]} to {years[index + 1]}:"
             )
-            print(
-                " "
-                + " ".join(
-                    pr_transition_hat_list[index].round(4).to_string().splitlines(True)
-                )
+            pr_transition_string = " ".join(
+                pr_transition_hat_list[index].round(4).to_string().splitlines(True)
             )
+            print(f" {pr_transition_string}")
 
-        print("saving plots of {} transition probabilities".format(algorithm))
-        pr_transition_truth_list = None
+        print(f"saving plots of {algorithm} transition probabilities")
 
         pr_transition_truth_list = simulation_params[
             "pr_transition_list"
@@ -542,82 +539,80 @@ def run_hmm_estimation(
             simulation_type, years, parent_directory="./csv", filename=filename
         )
 
-        if os.path.isfile(viterbi_outfile):
+        print(
+            "running viterbi on raster data using {} estimates, time is {}".format(
+                algorithm, dt.datetime.now()
+            )
+        )
+
+        observation_cols = [utils.get_observation_colname(year) for year in years]
+
+        viterbi_paths_df = get_viterbi_df(
+            df,
+            S_sorted,
+            years,
+            observation_cols,
+            upsilon_hat,
+            initial_distribution_hat,
+            pr_transition_hat_list,
+        )  # TODO Pass model parameters as a dictionary
+
+        print(" done running viterbi, time is {}".format(dt.datetime.now()))
+        assert len(df) == len(viterbi_paths_df)
+        df_with_viterbi = pd.concat([df, viterbi_paths_df], axis=1)
+        assert len(df_with_viterbi) == len(df)
+        viterbi_cols = ["viterbi_{}".format(x) for x in years]
+        df_with_viterbi["raster_and_viterbi_disagree"] = np.any(
+            df_with_viterbi[viterbi_cols].values
+            != df_with_viterbi[observation_cols].values,
+            axis=1,
+        )
+        print("saving {}".format(viterbi_outfile))
+        df_with_viterbi.to_csv(viterbi_outfile, index=False, header=True)
+
+        for year in years:
+
+            observation_colname = utils.get_observation_colname(year)
+
+            pr_viterbi_equals_raster = np.mean(
+                df_with_viterbi["viterbi_{}".format(year)]
+                == df_with_viterbi[observation_colname]
+            )
+
+            format_string = "viterbi agrees with {} raster in {} of rows"
             print(
-                "{} already exists: will load csv instead of re-running viterbi".format(
-                    viterbi_outfile
-                )
-            )
-            df_with_viterbi = pd.read_csv(viterbi_outfile)
+                format_string.format(year, pr_viterbi_equals_raster)
+            )  # Often in [0.90, 0.95]
 
-        else:
-
-            print(
-                "running viterbi on raster data using {} estimates, time is {}".format(
-                    algorithm, dt.datetime.now()
-                )
-            )
-
-            observation_cols = [utils.get_observation_colname(year) for year in years]
-
-            viterbi_paths_df = get_viterbi_df(
-                df,
-                S_sorted,
-                years,
-                observation_cols,
-                upsilon_hat,
-                initial_distribution_hat,
-                pr_transition_hat_list,
-            )  # TODO Pass model parameters as a dictionary
-
-            print(" done running viterbi, time is {}".format(dt.datetime.now()))
-            assert len(df) == len(viterbi_paths_df)
-            df_with_viterbi = pd.concat([df, viterbi_paths_df], axis=1)
-            assert len(df_with_viterbi) == len(df)
-            viterbi_cols = ["viterbi_{}".format(x) for x in years]
-            df_with_viterbi["raster_and_viterbi_disagree"] = np.any(
-                df_with_viterbi[viterbi_cols].values
-                != df_with_viterbi[observation_cols].values,
-                axis=1,
-            )
-            print("saving {}".format(viterbi_outfile))
-            df_with_viterbi.to_csv(viterbi_outfile, index=False, header=True)
-
-            for year in years:
-
-                observation_colname = utils.get_observation_colname(year)
-
-                pr_viterbi_equals_raster = np.mean(
-                    df_with_viterbi["viterbi_{}".format(year)]
-                    == df_with_viterbi[observation_colname]
-                )
-
-                format_string = "viterbi agrees with {} raster in {} of rows"
-                print(
-                    format_string.format(year, pr_viterbi_equals_raster)
-                )  # Often in [0.90, 0.95]
-
-            print_classification_accuracy(
-                simulation_type, years, df_with_viterbi
-            )  # Uses viterbi
+        print_classification_accuracy(
+            simulation_type, years, df_with_viterbi
+        )  # Uses viterbi
 
 
-def main(simulation_type, year_start, year_end, initial_pr_transition_diagonal):
+def main(
+    simulation_type, n_pixels, year_start, year_end, initial_pr_transition_diagonal
+):
 
     # Note: code assumes years are sorted
     years = np.arange(year_start, year_end + 1)
 
     run_hmm_estimation(
         simulation_type=simulation_type,
+        n_pixels=n_pixels,
         years=years,
         initial_pr_transition_diagonal=initial_pr_transition_diagonal,
     )
 
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
-        "--simulation_type", type=str, default=SIMULATION_SIMPLE, choices=SIMULATIONS
+        "--simulation_type",
+        type=str,
+        default=SIMULATION_SIMPLE_TWO_STATES,
+        choices=SIMULATIONS,
     )
 
     parser.add_argument(
@@ -628,8 +623,16 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--n_pixels",
+        type=int,
+        default=10000,
+        help="Number of pixels in the simulated panel dataset",
+    )
+
+    parser.add_argument(
         "--year_start", type=int, default=2011, help="First raster year, inclusive."
     )
+
     parser.add_argument(
         "--year_end", type=int, default=2016, help="Last raster year, inclusive."
     )
@@ -639,6 +642,7 @@ if __name__ == "__main__":
 
     main(
         simulation_type=args.simulation_type,
+        n_pixels=args.n_pixels,
         year_start=args.year_start,
         year_end=args.year_end,
         initial_pr_transition_diagonal=args.initial_pr_transition_diagonal,

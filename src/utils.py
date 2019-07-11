@@ -50,12 +50,11 @@ def get_crosstab(dataset, df, Y_sorted, year_from=2012, third_period_land_use=No
         if not land_use in crosstab.index:
             crosstab.loc[land_use] = 0
 
-    crosstab = (
-        crosstab.sort_index()
-    )  # Sort rows (so that they are in same order as Y_sorted)
-    crosstab = crosstab.reindex_axis(
-        sorted(crosstab.columns), axis=1
-    )  # Sort columns (also same order as Y_sorted)
+    # Sort rows (so that they are in same order as Y_sorted)
+    crosstab = crosstab.sort_index()
+
+    # Sort columns (also same order as Y_sorted)
+    crosstab = crosstab.reindex(sorted(crosstab.columns), axis=1)
 
     assert crosstab.shape == (len(Y_sorted), len(Y_sorted))
     assert np.all(crosstab.index.tolist() == Y_sorted)
@@ -252,42 +251,38 @@ def plot_pr_transition(
         fontsize=text_size,
     )
 
-    if pr_transition_truth_list is not None:
-        assert (
-            "simulation" in dataset
-        )  # Sanity check, e.g. dataset == 'simulation_simple'
-        pr_transition_truth = [
-            p.loc[land_use_from, land_use_to] for p in pr_transition_truth_list
-        ]
-        plt.plot(
-            years[:-1],
-            pr_transition_truth,
-            label="truth (simulation params)",
-            color="grey",
-            linewidth=linewidth,
-            marker="o",
-            ms=marker_size,
-            linestyle="--",
-        )
-        offset = -0.02 + 0.04 * (pr_transition_truth[0] > pr_transition_hat[0])
-        ax.text(
-            years[0] + 0.20,
-            pr_transition_truth[0] + offset,
-            "truth (simulation params)",
-            color="grey",
-            verticalalignment="center",
-            fontsize=text_size,
-        )
+    pr_transition_truth = [
+        p.loc[land_use_from, land_use_to] for p in pr_transition_truth_list
+    ]
+    plt.plot(
+        years[:-1],
+        pr_transition_truth,
+        label="truth (simulation params)",
+        color="grey",
+        linewidth=linewidth,
+        marker="o",
+        ms=marker_size,
+        linestyle="--",
+    )
+    offset = -0.02 + 0.04 * (pr_transition_truth[0] > pr_transition_hat[0])
+    ax.text(
+        years[0] + 0.20,
+        pr_transition_truth[0] + offset,
+        "truth (simulation params)",
+        color="grey",
+        verticalalignment="center",
+        fontsize=text_size,
+    )
 
     title_string = "{}: {}-to-{} transition probabilities".format(
         dataset, land_use_from, land_use_to
     )  # From t to t+1
     plt.title(title_string, fontsize=22)
     plt.ylabel("transition probability")
-    plt.xlim(xmax=years[-1] + 0.50)  # Make room for ax.tex
-    plt.xlim(xmin=years[0] - 0.25)
-    plt.ylim(ymax=1.04)
-    plt.ylim(ymin=min(min(pr_transition_hat), min(pr_transition_Y)) - 0.04)
+    plt.xlim(right=years[-1] + 0.50)  # Make room for ax.tex
+    plt.xlim(left=years[0] - 0.25)
+    plt.ylim(top=1.04)
+    plt.ylim(bottom=min(min(pr_transition_hat), min(pr_transition_Y)) - 0.04)
 
     filename = "{}_pr_transition_{}_to_{}.png".format(
         algorithm.replace(" ", "_"), land_use_from, land_use_to
