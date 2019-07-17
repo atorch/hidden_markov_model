@@ -148,7 +148,7 @@ clusterExport(cluster, c("get_random_initial_parameters",
                          "n_random_starts"))
 
 panel_sizes <- c(100, 200, 500, 1000, 5000, 10000)  # Slow, panel size 5000 took 22 hours on my laptop (4 CPUs)
-panel_sizes <- c(100, 200, 500)
+panel_sizes <- c(100, 200, 500, 1000)
 
 for(panel_size in panel_sizes) {
     outfile <- sprintf(outfile_format, n_random_starts, panel_size, n_replications)
