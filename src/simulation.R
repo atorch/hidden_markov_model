@@ -5,7 +5,7 @@ library(latex2exp)  # For ggplot2 xlab
 library(parallel)
 library(Rsolnp)
 
-## Variables defined in this simulation can be reference in latex document using \Sexpr
+## Variables defined in this simulation can be reference in latex documents using \Sexpr
 
 source("functions_hmm.R")
 source("ggplot_utils.R")
@@ -14,33 +14,50 @@ set_ggplot_theme()
 set.seed(321321)
 
 get_random_initial_parameters <- function(params0) {
+
+    ## Given a true set of HMM parameters, return random incorrect parameters from which to begin parameter estimation
+
     initial_parameters <- list(n_components=params0$n_components)
+
     initial_parameters$P_list <- lapply(params0$P_list, function(correct_P) {
-        random_uniform <- runif(params0$n_components, min=0.60, max=0.98)  # Probabilities on diagonals for transition probabilities
+
+        ## Probabilities on diagonals of the transition probability matrices
+        random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
+
         P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
         diag(P) <- random_uniform
+
         return(P)
     })
-    random_uniform <- runif(params0$n_components, min=0.60, max=0.98)  # Probabilities on diagonals for pr_y
+
+    ## Probabilities on the diagonals of the observation probability matrix pr_y
+    random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
     initial_parameters$pr_y <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$pr_y), ncol=ncol(params0$pr_y))
     diag(initial_parameters$pr_y) <- random_uniform
-    initial_parameters$mu <- params0$mu  # Use correct values for initial distribution
+
+    ## The initial distribution over hidden states is set to its true value
+    initial_parameters$mu <- params0$mu
+
     return(initial_parameters)
 }
 
 get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, n_panel_elements=5000, n_random_starts=5) {
+
     ## Params0 are true parameters, params1 are incorrect parameters from which to start estimation
+
     require(data.table)
     require(Rsolnp)
+
     panel <- replicate(n_panel_elements, simulate_hmm(params0), simplify=FALSE)
     random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
-    ## hmm_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-    ##     return(em_parameter_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
-    ## })
-    ## likelihoods <- sapply(hmm_params_hat_list, function(x) {
-    ##     return(max(x$loglik))
-    ## })
-    ## Need dtable to construct min dist objects (e.g. joint distribution of Y)
+
+    hmm_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
+        return(em_parameter_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
+    })
+    likelihoods <- sapply(hmm_params_hat_list, function(x) {
+        return(max(x$loglik))
+    })
+
     for(idx in seq_along(panel)) {
         panel[[idx]]$point_id <- idx
         panel[[idx]]$time <- seq_along(panel[[idx]]$y)
@@ -99,52 +116,95 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     objfn_values <- sapply(min_dist_params_hat_list, function(x) {
         return(min(x$objfn_values))
     })
-    return(list(## "hmm_params_hat_list"=hmm_params_hat_list,
-                ## "hmm_params_hat_loglikelihoods"=likelihoods,
+    return(list("panel_size"=n_panel_elements,
+                "hmm_params_hat_list"=hmm_params_hat_list,
+                "hmm_params_hat_loglikelihoods"=likelihoods,
                 "initial_parameters_list"=random_initial_parameters,
-                ## "hmm_params_hat_best_likelihood"=hmm_params_hat_list[[which.max(likelihoods)]],
+                "hmm_params_hat_best_likelihood"=hmm_params_hat_list[[which.max(likelihoods)]],
                 "min_dist_params_hat_list"=min_dist_params_hat_list,
                 "min_dist_objfn_values"=objfn_values,
                 "min_dist_params_hat_best_objfn"=min_dist_params_hat_list[[which.min(objfn_values)]]))
 }
 
-## List of parameters defining an HMM model, used as input in my simulation and estimation functions
-params0 <- list(n_components=2, mu=c(0.7, 0.3))  # Initial distribution over hidden states
-pr_y <- rbind(c(0.90, 0.10),
-              c(0.20, 0.80))  # Observation probabilities (rows are hidden states, columns are Y)
-P_list <- list(rbind(c(0.96, 0.04),
-                     c(0.02, 0.98)),  # Transition probabilities for hidden state from time 1 to 2
-               rbind(c(0.90, 0.10),
-                     c(0.07, 0.93)),  # Transition probabilities for hidden state from time 2 to 3
-               rbind(c(0.80, 0.20),
-                     c(0.30, 0.70)))  # Transition probabilities for hidden state from time 3 to 4
-rows_sum_to_one <- function(probability_matrix) {
-    ## Useful for checking transition and observation probabilities
-    return(isTRUE(all.equal(rowSums(probability_matrix), rep(1, nrow(probability_matrix)))))
+get_params0 <- function() {
+
+    ## Build a list of parameters defining an HMM model, used as input in simulation and estimation functions
+
+    ## Initial distribution over hidden states
+    params0 <- list(n_components=2, mu=c(0.7, 0.3))
+
+    ## Observation probabilities (rows are hidden states, columns are Y)
+    pr_y <- rbind(c(0.90, 0.10),
+                  c(0.20, 0.80))
+
+    ## List of transition probabilities for the hidden state
+    ## P_list[[t]] gives the transition probabilties from period t to t+1
+    P_list <- list(rbind(c(0.96, 0.04),
+                         c(0.02, 0.98)),
+                   rbind(c(0.90, 0.10),
+                         c(0.07, 0.93)),
+                   rbind(c(0.80, 0.20),
+                         c(0.30, 0.70)))
+
+    stopifnot(rows_sum_to_one(pr_y))
+    stopifnot(all(sapply(P_list, rows_sum_to_one)))
+
+    params0$P_list <- P_list
+    params0$pr_y <- pr_y
+
+    return(params0)
 }
-stopifnot(rows_sum_to_one(pr_y))
-stopifnot(all(sapply(P_list, rows_sum_to_one)))
-params0$P_list <- P_list
-params0$pr_y <- pr_y
 
-## Define incorrect parameters, see whether HMM and min distance estimators still do well under incorrect starting values
-params1 <- params0
-params1$pr_y <- rbind(c(0.70, 0.30),
-                      c(0.30, 0.70))  # Incorrect Pr[Y | X]
-params1$P_list <- replicate(n=length(params0$P_list), rbind(c(0.96, 0.04),
-                                                            c(0.04, 0.96)), simplify=FALSE)  # Incorrect transition probabilities
+get_params1 <- function(params0) {
 
-## Define second set of incorrect parameters, even farther from params0
-params2 <- params0
-params2$pr_y <- rbind(c(0.60, 0.40),
-                      c(0.40, 0.60))
-params2$P_list <- replicate(n=length(params0$P_list), rbind(c(0.60, 0.40),
-                                                            c(0.40, 0.60)), simplify=FALSE)
+    ## Define incorrect parameters, see whether HMM and min distance estimators still do well under incorrect starting values
+    params1 <- params0
 
-n_panel_elements <- 10000  # Analogous to number of spatial points in Amazon application
+    ## Modify the observation probabilities
+    params1$pr_y <- rbind(c(0.70, 0.30),
+                          c(0.30, 0.70))
+
+    ## Modify the transition probabilities
+    params1$P_list <- replicate(n=length(params0$P_list),
+                                rbind(c(0.96, 0.04),
+                                      c(0.04, 0.96)), simplify=FALSE)
+
+    return(params1)
+}
+
+get_params2 <- function(params0) {
+
+    ## Define second set of incorrect parameters, even farther from params0 than params1
+    params2 <- params0
+
+    ## Modify the observation probabilities
+    params2$pr_y <- rbind(c(0.60, 0.40),
+                          c(0.40, 0.60))
+
+    ## Modify the transition probabilities
+    params2$P_list <- replicate(n=length(params0$P_list),
+                                rbind(c(0.60, 0.40),
+                                      c(0.40, 0.60)), simplify=FALSE)
+
+    return(params2)
+}
+
+params0 <- get_params0()
+params1 <- get_params1(params0)
+params2 <- get_params2(params0)
+
+## This the size of the panel dataset, i.e. the number of observations per time period
+n_panel_elements <- 10000
+
+## Simulate a panel dataset
 panel <- replicate(n_panel_elements, simulate_hmm(params0), simplify=FALSE)
-panel[[1]]  # Contains observation sequence y, hidden state sequence x
-length(panel[[1]]$y)  # This is analogous to the number of years for which we observe each spatial point
+
+## Each element of the panel contains an observation sequence y and hidden state sequence x
+## The length of y is the number of years (or time periods) for which we observe each spatial point
+panel[[1]]
+length(panel[[1]]$y)
+
+## Use the simulated panel data to estimate the model's parameters using params0, params1, and params2 as initial values
 
 outfile <- "simulation_methodology_params0_hat.rds"
 if(file.exists(outfile)) {
@@ -177,11 +237,12 @@ if(file.exists(outfile)) {
 max(abs(c(params2_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
 max(abs(params2_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
 
+## Which initial parameter values ended up with highest likelihood (careful, returns index in {1, 2, 3}, not {0, 1, 2})
 which.max(c(max(params0_hat$loglik),
             max(params1_hat$loglik),
-            max(params2_hat$loglik)))  # Which initial parameter values ended up with highest likelihood (careful, returns index in {1, 2, 3}, not {0, 1, 2})
+            max(params2_hat$loglik)))
 
-## Convert panel (which is a list) to a data.table, easier to get transition matrices
+## Convert panel from list to data.table, to make it easier to compute transition matrices
 for(idx in seq_along(panel)) {
     panel[[idx]]$point_id <- idx
     panel[[idx]]$time <- seq_along(panel[[idx]]$y)
@@ -194,8 +255,10 @@ dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
 dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
 head(dtable[, c("point_id", "time", "y", "y_one_period_ahead", "y_two_periods_ahead"), with=FALSE], 25)  # Sanity check
 
-## Marginal distribution of hidden state, versus marginal distribution of observations
-marginals_sample <- dtable[, list(pr_s_1=mean(x==1), pr_y_1=mean(y==1)), by="time"]  # Marginal probability of state 1 by time (sample), I use x for hidden state
+## Compute the marginal distribution of the hidden state over time
+## Compare it to the marginal distribution of observations
+## "Sample" refers to the simulated panel dataset, as opposed to the population's data generating process
+marginals_sample <- dtable[, list(pr_s_1=mean(x==1), pr_y_1=mean(y==1)), by="time"]
 marginal_s_population <- matrix(NA, nrow=length(unique(dtable$time)), ncol=params0$n_components)
 marginal_s_population[1, ] <- params0$mu
 for(time_index in seq(2, nrow(marginal_s_population))) {
@@ -206,10 +269,15 @@ for(time_index in seq(1, nrow(marginal_s_population))) {
     marginal_y_population[time_index, ] <- marginal_s_population[time_index, ] %*% params0$pr_y
 }
 
+## Compute the joint distribution of (Y_{t+1}, Y_{t}) for each time period t
 M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
     with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
-})  # Joint distribution of (Y_{t+1}, Y_{t}) and (Y_{t+2}, Y_{t+1})
-M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)  # Compute inverses once, before running solnp
+})
+
+## Compute inverses once and cache the results, to be re-used by solnp when estimating parameters
+M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
+
+## Compute the joint distribution of (Y_{t+1}, Y_{t}) conditional on Y_{t+2}
 M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
     lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
         return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
@@ -222,8 +290,8 @@ P1_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[1]])
 P2_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[2]])
 P3_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[3]])
 
+## Compute the joint distribution of hidden states (S_t, S_{t+1}) implied by params0
 M_S_joint_list_population <- lapply(seq_along(params0$P_list), function(time_index) {
-    ## Joint distribution of S_t, S_{t+1} implied by params0
     if(time_index == 1) {
         mu_t <- params0$mu  # Equals initial distribution when t=1
     } else {
@@ -235,7 +303,9 @@ M_S_joint_list_population <- lapply(seq_along(params0$P_list), function(time_ind
 M_Y_joint_list_population <- lapply(M_S_joint_list_population, function(M) {
     return(t(params0$pr_y) %*% M %*% params0$pr_y)
 })
-P_naive_population <- lapply(M_Y_joint_list_population, get_transition_probs_from_M_S_joint)  # Compare to P1_hat_naive, P2_hat_naive, ...
+
+## Compare to P1_hat_naive, P2_hat_naive, ...
+P_naive_population <- lapply(M_Y_joint_list_population, get_transition_probs_from_M_S_joint)
 
 ## Minimum distance estimation starting from incorrect parameters
 M_S_joint_list_incorrect <- lapply(seq_along(params1$P_list), function(time_index) {
@@ -292,13 +362,16 @@ min_dist_params0_hat <- list(pr_y=t(M_Y_given_S_hat0),
                              P_list=lapply(M_S_joint_list_hat0, get_transition_probs_from_M_S_joint),
                              convergence=solnp_result0$convergence,
                              objfn_values=solnp_result0$values)
-max(abs(M_Y_given_S_hat0 - M_Y_given_S_hat1))
-max(abs(c(M_S_joint_list_hat0, recursive=TRUE) - c(M_S_joint_list_hat1, recursive=TRUE)))  # Essentially zero: same min dist results starting from params0 and params1
 
-## Check that minimum distance estimation works exactly when using population values for the distribution of Y_t
+## Essentially zero: we get the same min dist results starting from either params0 or params1
+max(abs(M_Y_given_S_hat0 - M_Y_given_S_hat1))
+max(abs(c(M_S_joint_list_hat0, recursive=TRUE) - c(M_S_joint_list_hat1, recursive=TRUE)))
+
+## Check that minimum distance estimation returns correct parameter values when using population values for the distribution of Y_t
+## Compare to sample analogue M_Y_joint_hat_list
 M_Y_joint_hat_list_population <- lapply(M_S_joint_list_population, function(M) {
     return(t(params0$pr_y) %*% M %*% params0$pr_y)  # Careful, my pr_y has hidden states along the rows, transpose of misclassification matrix in paper
-})  # Compare to sample analogue M_Y_joint_hat_list
+})
 M_Y_joint_hat_inverse_list_population <- lapply(M_Y_joint_hat_list_population, solve)
 M_fixed_y_Y_joint_hat_list_population <- lapply(seq_len(params0$n_components), function(fixed_y) {
     lapply(seq_len(length(params0$P_list) - 1), function(fixed_t) {
@@ -307,7 +380,10 @@ M_fixed_y_Y_joint_hat_list_population <- lapply(seq_len(params0$n_components), f
         return(t(params0$pr_y) %*% D %*% solve(t(params0$pr_y)) %*% M_Y_joint_hat_list_population[[fixed_t]])  # Compare to sample analogue M_fixed_y_Y_joint_hat_list
     })
 })
-solnp_result_population <- solnp(x_guess1,  # Use population values for objfn, incorrect starting values for optimization -- result should be exactly correct
+## Use population values for the objective function, with incorrect starting values for optimization
+## Despite the incorrect starting values, the estimation should recover the true parameters without error
+## The optimizer should be able to get the objective function down to zero
+solnp_result_population <- solnp(x_guess1,
                                  fun=objfn_minimum_distance, eqfun=eq_function_minimum_distance,
                                  eqB=rep(1, params0$n_components + max(dtable$time) - 1),
                                  LB=rep(0, length(x_guess1)),
@@ -317,18 +393,25 @@ solnp_result_population <- solnp(x_guess1,  # Use population values for objfn, i
                                  M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list_population,
                                  max_time=max_time,
                                  n_components=params0$n_components,
-                                 control=list(delta=1e-14, tol=1e-14, trace=1))  # Should achieve objfn of zero with population values
-M_Y_given_S_hat_population <- matrix(solnp_result_population$pars[seq(1, params0$n_components^2)], params0$n_components, params0$n_components)  # Compare to t(params0$pr_y)
+                                 control=list(delta=1e-14, tol=1e-14, trace=1)) 
+
+## Compare to true parameters i.e. t(params0$pr_y)
+M_Y_given_S_hat_population <- matrix(solnp_result_population$pars[seq(1, params0$n_components^2)], params0$n_components, params0$n_components)
+
+## Compare to M_S_joint_list_population
 M_S_joint_list_hat_population <- lapply(seq_len(max_time - 1), function(time_index, n_components=params1$n_components) {
     return(matrix(solnp_result_population$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
-})  # Compare to M_S_joint_list_population
-max(abs(c(M_S_joint_list_hat_population, recursive=TRUE) - c(M_S_joint_list_population, recursive=TRUE)))  # Small
+})
+
+## This distance should be essentially zero: the estimates ("hats") recover the true parameters
+max(abs(c(M_S_joint_list_hat_population, recursive=TRUE) - c(M_S_joint_list_population, recursive=TRUE)))
 
 ## Second simulation using random initial parameter values
 test_random_params <- get_random_initial_parameters(params0)
 ## test_estimates_with_5_random_initializations <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, n_random_starts=5)  # Slow!
+
 cluster <- makeCluster(detectCores())
-n_replications <- 20
+n_replications <- 100
 n_random_starts <- 6
 outfile_format <- "simulation_sampling_distribution_with_%s_random_initial_parameters_panel_size_%s_%s_replications.rds"
 clusterExport(cluster, c("get_random_initial_parameters",
@@ -345,7 +428,10 @@ clusterExport(cluster, c("get_random_initial_parameters",
                          "params0",
                          "params1",
                          "n_random_starts"))
+
 panel_sizes <- c(100, 200, 500, 1000, 5000, 10000)  # Slow, panel size 5000 took 22 hours on my laptop (4 CPUs)
+panel_sizes <- c(100, 200, 500)
+
 for(panel_size in panel_sizes) {
     outfile <- sprintf(outfile_format, n_random_starts, panel_size, n_replications)
     if(file.exists(outfile)) {
@@ -363,40 +449,44 @@ for(panel_size in panel_sizes) {
 stopCluster(cluster)
 
 infiles <- sprintf(outfile_format, n_random_starts, panel_sizes, n_replications)
-list_of_lists_of_replications <- lapply(infiles, readRDS)
-stopifnot(all(sapply(list_of_lists_of_replications, length) == n_replications))
-list_of_df <- lapply(list_of_lists_of_replications, function(list_of_replications) {
-    df <- data.frame(panel_size=sapply(list_of_replications, function(replication) {
+
+## This is a list of lists: for each set of parameter values, we have multiple replications of the simulation
+all_simulations <- lapply(infiles, readRDS)
+stopifnot(all(sapply(all_simulations, length) == n_replications))
+
+dataframes <- lapply(all_simulations, function(replications) {
+    df <- data.frame(panel_size=sapply(replications, function(replication) {
         return(replication$hmm_params_hat_best_likelihood$panel_size)
     }),
-    hmm_params_hat_n_iterations=sapply(list_of_replications, function(replication) {
+    hmm_params_hat_n_iterations=sapply(replications, function(replication) {
         return(replication$hmm_params_hat_best_likelihood$n_em_iterations)
     }),
-    hmm_params_hat_pr_y_11=sapply(list_of_replications, function(replication) {
+    hmm_params_hat_pr_y_11=sapply(replications, function(replication) {
         return(replication$hmm_params_hat_best_likelihood$pr_y[1, 1])
     }),
-    hmm_params_hat_pr_y_22=sapply(list_of_replications, function(replication) {
+    hmm_params_hat_pr_y_22=sapply(replications, function(replication) {
         return(replication$hmm_params_hat_best_likelihood$pr_y[2, 2])
     }),
-    min_dist_params_hat_pr_y_11=sapply(list_of_replications, function(replication) {
+    min_dist_params_hat_pr_y_11=sapply(replications, function(replication) {
         return(replication$min_dist_params_hat_best_objfn$pr_y[1, 1])
     }),
-    min_dist_params_hat_pr_y_22=sapply(list_of_replications, function(replication) {
+    min_dist_params_hat_pr_y_22=sapply(replications, function(replication) {
         return(replication$min_dist_params_hat_best_objfn$pr_y[2, 2])
     }))
     for(time_index in seq_along(params0$P_list)) {
         varname <- sprintf("hmm_params_hat_P%s_11", time_index)
-        df[, varname] <- sapply(list_of_replications, function(replication) {
+        df[, varname] <- sapply(replications, function(replication) {
             return(replication$hmm_params_hat_best_likelihood$P_list[[time_index]][1, 1])
         })
         varname <- sprintf("min_dist_params_hat_P%s_11", time_index)
-        df[, varname] <- sapply(list_of_replications, function(replication) {
+        df[, varname] <- sapply(replications, function(replication) {
             return(replication$min_dist_params_hat_best_objfn$P_list[[time_index]][1, 1])
         })
     }
     return(df)
 })
-df <- rbindlist(list_of_df)
+
+df <- rbindlist(dataframes)
 df$panel_size_label <- sprintf("%s%s", ifelse(df$panel_size %in% c(100, 1000), "sample size = ", ""), df$panel_size)
 df$panel_size_label <- factor(df$panel_size_label,
                               levels=sprintf("%s%s", ifelse(sort(unique(df$panel_size)) %in% c(100, 1000), "sample size = ", ""), sort(unique(df$panel_size))))
@@ -411,7 +501,7 @@ for (time_index in seq_along(params0$P_list)) {
               facet_wrap(~ panel_size_label, scale="free_x") +
               geom_rug(aes(x=true_value), data=data.frame(true_value=params0$P_list[[time_index]][1, 1])) +  # Correct parameter value
               ylab("") + xlab(""))
-        outfile <- sprintf("~/Dropbox/amazon_hmm_shared/plots/simulation_methodology_%s_random_initialization_P_hat_%s_11_sampling_distribution.png", estimator, time_index)
+        outfile <- sprintf("simulation_methodology_%s_random_initialization_P_hat_%s_11_sampling_distribution.png", estimator, time_index)
         message("saving ", outfile)
         ggsave(outfile, p, width=12.5, height=8)
     }
@@ -428,7 +518,7 @@ for(matrix_index in c("11", "22")) {
               facet_wrap(~ panel_size_label, scale="free_x") +
               geom_rug(aes(x=true_value), data=data.frame(true_value=true_value)) +  # Correct parameter value
               ylab("") + xlab(""))
-        outfile <- sprintf("~/Dropbox/amazon_hmm_shared/plots/simulation_methodology_%s_random_initialization_pr_y_%s_sampling_distribution.png", estimator, matrix_index)
+        outfile <- sprintf("simulation_methodology_%s_random_initialization_pr_y_%s_sampling_distribution.png", estimator, matrix_index)
         message("saving ", outfile)
         ggsave(outfile, p, width=12.5, height=8)
     }
@@ -441,7 +531,7 @@ p <- (ggplot(df_melted, aes(x=value)) +
 p  # Looks correct, compare to params0 -- careful, lots of estimates hit max_iter
 
 ## Do min dist estimates vary with initial parameters?
-P_hat_range_min_dist <- c(lapply(list_of_lists_of_replications, function(list_of_replications) {
+P_hat_range_min_dist <- c(lapply(all_simulations, function(list_of_replications) {
     sapply(list_of_replications, function(replication) {
         matrix_of_P_hat <- sapply(replication$min_dist_params_hat_list, function(x) {
             return(c(x$P_list, recursive=TRUE))
@@ -452,7 +542,7 @@ P_hat_range_min_dist <- c(lapply(list_of_lists_of_replications, function(list_of
 }), recursive=TRUE)
 sum(P_hat_range_min_dist > 0.01)  # 60 simulations out of length(P_hat_range_min_dist)=1200 where P_hat differs by more than 0.01 across initializations
 sum(P_hat_range_min_dist > 0.10)  # 37 simulations out of length(P_hat_range_min_dist)=1200 where P_hat differs by more than 0.10 across initializations
-P_hat_range_em <- c(lapply(list_of_lists_of_replications, function(list_of_replications) {
+P_hat_range_em <- c(lapply(all_simulations, function(list_of_replications) {
     sapply(list_of_replications, function(replication) {
         matrix_of_P_hat <- sapply(replication$hmm_params_hat_list, function(x) {
             return(c(x$P_list, recursive=TRUE))
@@ -497,7 +587,7 @@ p <- (ggplot(dtable_melted, aes(x=panel_size, y=value, color=estimator)) +
       geom_hline(yintercept=0, linetype=2, color="grey") +
       facet_wrap(~ parameter, scales="free_y"))
 p
-outfile <- "~/Dropbox/amazon_hmm_shared/plots/simulation_methodology_random_initialization_rmse_em_and_min_dist.png"
+outfile <- "simulation_methodology_random_initialization_rmse_em_and_min_dist.png"
 message("saving ", outfile)
 ggsave(outfile, p, width=11, height=8)
 

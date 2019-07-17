@@ -397,3 +397,8 @@ simulate_hmm <- function(params) {
     }
     return(list(x=x, y=y))
 }
+
+rows_sum_to_one <- function(probability_matrix) {
+    ## Useful for checking transition and observation probabilities
+    return(isTRUE(all.equal(rowSums(probability_matrix), rep(1, nrow(probability_matrix)))))
+}

@@ -15,4 +15,5 @@ python src/simulation.py --simulation time_varying
 # References
 
 The expectation-maximization (EM) and Viterbi code in [src/estimation.py](src/estimation.py)
-is based on https://web.math.princeton.edu/~rvan/orf557/hmm080728.pdf.
+is based on https://web.math.princeton.edu/~rvan/orf557/hmm080728.pdf,
+but modified to allow for time-varying transition probabilities and panel datasets.
