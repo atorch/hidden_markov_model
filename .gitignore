@@ -111,3 +111,4 @@ pickles/*
 plots/*
 *.png
 *.rds
+*.Rhistory
