@@ -1,8 +1,10 @@
+library(data.table)
+
 source("hmm_functions.R")
 
 n_time_periods <- 4
 n_points_per_county <- 1000
-n_counties <- 200
+n_counties <- 50
 
 get_deforestation_probability <- function(x, county_fixed_effect) {
 
@@ -55,13 +57,27 @@ simulate_single_county <- function(county_id, n_time_periods, n_points_per_count
 
     county_simulation <- replicate(n_points_per_county, simulate_hmm(county_params), simplify=FALSE)
 
-    return(list(county_simulation=county_simulation,
-                county_params=county_params,
-                county_fixed_effect=county_fixed_effect,
-                county_X=county_X))
+    return(list(simulation=county_simulation,
+                params=county_params,
+                fixed_effect=county_fixed_effect,
+                X=county_X,
+                id=county_id))
 }
 
-simulate_single_county(county_id=0, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county)
+counties <- lapply(seq_len(n_counties), function(n) {
+    simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county)
+})
 
-## TODO Simulate multiple counties
-## Estimate relationship between county_X and deforestation rate (using naive, EM, and MD estimators)
+county_dfs <- lapply(counties, function(county) {
+
+    ## TODO Also return naive, MD and EM deforestation probability estimates
+
+    return(data.table(x=county$X,
+                      time=seq_len(county$X),
+                      county_id=county$id))
+})
+
+county_df <- rbindlist(county_dfs)
+setkey(county_df, county_id)
+
+## TODO Estimate relationship between county_X and deforestation rate (using naive, EM, and MD estimators)
