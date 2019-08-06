@@ -8,6 +8,7 @@ n_counties <- 50
 
 get_deforestation_probability <- function(x, county_fixed_effect) {
 
+    ## Note: x is a county- and time-varying predictor
     return(1 / (1 + exp(-(-4 + x + county_fixed_effect))))
 
 }
@@ -72,12 +73,25 @@ county_dfs <- lapply(counties, function(county) {
 
     ## TODO Also return naive, MD and EM deforestation probability estimates
 
+    true_deforestation_probability <- sapply(county$params$P_list, function(P) {
+        return(P[1, 2])
+    })
     return(data.table(x=county$X,
-                      time=seq_len(county$X),
-                      county_id=county$id))
+                      fixed_effect=county$fixed_effect,
+                      time=seq_along(county$X),
+                      county_id=county$id,
+                      true_deforestation_probability=true_deforestation_probability))
 })
 
 county_df <- rbindlist(county_dfs)
 setkey(county_df, county_id)
+
+county_df[, county_id_factor := factor(county_id)]
+county_df[, true_y := log(true_deforestation_probability)]
+
+summary(lm(true_y ~ x + county_id_factor, data=county_df))
+
+# Note: this should recover the coefficients in get_deforestation_probability
+summary(lm(true_y ~ x + fixed_effect, data=county_df))
 
 ## TODO Estimate relationship between county_X and deforestation rate (using naive, EM, and MD estimators)
