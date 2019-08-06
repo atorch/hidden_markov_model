@@ -25,4 +25,10 @@ TODO Put the .R code in its own directory, document here.
 
 The expectation-maximization (EM) and Viterbi code in [src/estimation.py](src/estimation.py)
 is based on https://web.math.princeton.edu/~rvan/orf557/hmm080728.pdf,
-but modified to allow for time-varying transition probabilities and panel datasets.
+with modifications to allow for time-varying transition probabilities and panel datasets.
+The most relevant sections in Ramon van Handel's HMM notes are
+
+* Algorithm 3.1: Forward-Backward Algorithm
+* Algorithm 3.2: Baum-Welch Algorithm
+* Algorithm 3.4: Viterbi Algorithm
+* Algorithm 6.1: Concrete EM Algorithm
