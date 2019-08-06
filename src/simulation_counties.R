@@ -4,7 +4,7 @@ source("hmm_functions.R")
 
 n_time_periods <- 4
 n_points_per_county <- 1000
-n_counties <- 50
+n_counties <- 2
 
 get_deforestation_probability <- function(x, county_fixed_effect) {
 
@@ -58,7 +58,10 @@ simulate_single_county <- function(county_id, n_time_periods, n_points_per_count
 
     county_simulation <- replicate(n_points_per_county, simulate_hmm(county_params), simplify=FALSE)
 
+    estimates <- get_hmm_and_minimum_distance_estimates_random_initialization(params=county_params, panel=county_simulation)
+
     return(list(simulation=county_simulation,
+                estimates=estimates,
                 params=county_params,
                 fixed_effect=county_fixed_effect,
                 X=county_X,
@@ -76,11 +79,17 @@ county_dfs <- lapply(counties, function(county) {
     true_deforestation_probability <- sapply(county$params$P_list, function(P) {
         return(P[1, 2])
     })
+
+    estimated_deforestation_probability_hmm <- sapply(county$estimates$hmm_params_hat_best_likelihood$P_list, function(P) {
+        return(P[1, 2])
+    })
+
     return(data.table(x=county$X,
                       fixed_effect=county$fixed_effect,
                       time=seq_along(county$X),
                       county_id=county$id,
-                      true_deforestation_probability=true_deforestation_probability))
+                      true_deforestation_probability=true_deforestation_probability,
+                      estimated_deforestation_probability_hmm=estimated_deforestation_probability_hmm))
 })
 
 county_df <- rbindlist(county_dfs)
@@ -88,6 +97,9 @@ setkey(county_df, county_id)
 
 county_df[, county_id_factor := factor(county_id)]
 county_df[, true_y := log(true_deforestation_probability)]
+county_df[, hmm_y := log(estimated_deforestation_probability_hmm)]
+
+with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_hmm)); abline(a=0, b=1, lty=2)
 
 summary(lm(true_y ~ x + county_id_factor, data=county_df))
 
