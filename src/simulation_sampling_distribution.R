@@ -8,132 +8,28 @@ library(Rsolnp)
 source("hmm_functions.R")
 source("hmm_parameters.R")
 source("ggplot_utils.R")
+
 set_ggplot_theme()
 
 set.seed(321321)
 
-
-get_random_initial_parameters <- function(params0) {
-
-    ## Given a true set of HMM parameters, return random incorrect parameters from which to begin parameter estimation
-
-    initial_parameters <- list(n_components=params0$n_components)
-
-    initial_parameters$P_list <- lapply(params0$P_list, function(correct_P) {
-
-        ## Probabilities on diagonals of the transition probability matrices
-        random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
-
-        P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
-        diag(P) <- random_uniform
-
-        return(P)
-    })
-
-    ## Probabilities on the diagonals of the observation probability matrix pr_y
-    random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
-    initial_parameters$pr_y <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$pr_y), ncol=ncol(params0$pr_y))
-    diag(initial_parameters$pr_y) <- random_uniform
-
-    ## The initial distribution over hidden states is set to its true value
-    initial_parameters$mu <- params0$mu
-
-    return(initial_parameters)
-}
-
-get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, n_panel_elements=5000, n_random_starts=5) {
-
-    ## Params0 are true HMM parameters used to generate data
-
-    require(data.table)
-    require(Rsolnp)
-
-    panel <- replicate(n_panel_elements, simulate_hmm(params0), simplify=FALSE)
-    random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
-
-    hmm_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-        return(em_parameter_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
-    })
-    likelihoods <- sapply(hmm_params_hat_list, function(x) {
-        return(max(x$loglik))
-    })
-
-    for(idx in seq_along(panel)) {
-        panel[[idx]]$point_id <- idx
-        panel[[idx]]$time <- seq_along(panel[[idx]]$y)
-    }
-    dtable <- rbindlist(Map(data.frame, panel))
-    setkey(dtable, point_id)
-    stopifnot(all(c("point_id", "time", "x", "y") %in% names(dtable)))
-    dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
-    dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
-    head(dtable[, c("point_id", "time", "y", "y_one_period_ahead", "y_two_periods_ahead"), with=FALSE], 25)  # Sanity check
-    M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
-        with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
-    })  # Joint distribution of (Y_{t+1}, Y_{t}) and (Y_{t+2}, Y_{t+1})
-    M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)  # Compute inverses once, before running solnp
-    M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
-        lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
-            return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
-                        table(y_one_period_ahead, y)) / sum(dtable$time == fixed_t))
-        })
-    })  # TODO Need to handle edge case where any of these matrices are not invertible, might happen at small sample sizes
-    min_dist_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-        M_S_joint_list_initial <- lapply(seq_along(initial_params$P_list), function(time_index) {
-            ## Joint distribution of S_t, S_{t+1} implied by initial params
-            if(time_index == 1) {
-                mu_t <- initial_params$mu  # Equals initial distribution when t=1
-            } else {
-                mu_t <- initial_params$mu %*% Reduce("%*%", initial_params$P_list[seq_len(time_index- 1)])
-            }
-            stopifnot(isTRUE(all.equal(sum(mu_t), 1)))  # Valid probability distribution, careful comparing floats
-            return(t(initial_params$P_list[[time_index]] * matrix(mu_t, length(mu_t), length(mu_t))))
-        })
-        x_guess1 <- c(t(initial_params$pr_y), c(M_S_joint_list_initial, recursive=TRUE))
-        max_time <- max(dtable$time)
-        solnp_result1 <- solnp(x_guess1,
-                               fun=objfn_minimum_distance, eqfun=eq_function_minimum_distance,
-                               eqB=rep(1, params0$n_components + max(dtable$time) - 1),
-                               LB=rep(0, length(x_guess1)),
-                               UB=rep(1, length(x_guess1)),
-                               M_Y_joint_hat_list=M_Y_joint_hat_list,
-                               M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
-                               M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
-                               max_time=max_time,
-                               n_components=params0$n_components,
-                               control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
-        M_Y_given_S_hat1 <- matrix(solnp_result1$pars[seq(1, params0$n_components^2)], params0$n_components, params0$n_components)  # Transpose of params0$pr_y
-        M_S_joint_list_hat1 <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
-            return(matrix(solnp_result1$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
-
-        })
-        min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat1),
-                                    P_list=lapply(M_S_joint_list_hat1, get_transition_probs_from_M_S_joint),
-                                    convergence=solnp_result1$convergence,
-                                    objfn_values=solnp_result1$values)  # Choose estimates with lowest objfn values
-        return(min_dist_params_hat)
-    })
-    objfn_values <- sapply(min_dist_params_hat_list, function(x) {
-        return(min(x$objfn_values))
-    })
-    return(list("panel_size"=n_panel_elements,
-                "hmm_params_hat_list"=hmm_params_hat_list,
-                "hmm_params_hat_loglikelihoods"=likelihoods,
-                "initial_parameters_list"=random_initial_parameters,
-                "hmm_params_hat_best_likelihood"=hmm_params_hat_list[[which.max(likelihoods)]],
-                "min_dist_params_hat_list"=min_dist_params_hat_list,
-                "min_dist_objfn_values"=objfn_values,
-                "min_dist_params_hat_best_objfn"=min_dist_params_hat_list[[which.min(objfn_values)]]))
-}
-
 ## True HMM parameters used in simulation
 params0 <- get_params0()
+
+get_estimates <- function(params0, n_panel_elements, n_random_starts) {
+
+    panel <- replicate(n_panel_elements, simulate_hmm(params0), simplify=FALSE)
+    estimates <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, panel, n_random_starts)
+
+    return(estimates)
+}
 
 cluster <- makeCluster(detectCores())
 n_replications <- 100
 n_random_starts <- 6
 outfile_format <- "simulation_sampling_distribution_with_%s_random_initial_parameters_panel_size_%s_%s_replications.rds"
 clusterExport(cluster, c("get_random_initial_parameters",
+                         "get_estimates",
                          "get_hmm_and_minimum_distance_estimates_random_initialization",
                          "em_parameter_estimates",
                          "baum_welch",
@@ -157,7 +53,7 @@ for(panel_size in panel_sizes) {
     } else {
         message("running replications with random initialization, time is ", Sys.time())
         replications_random_initialization <- parLapply(cluster, rep(panel_size, n_replications), function(x) {
-            get_hmm_and_minimum_distance_estimates_random_initialization(params0=params0, n_panel_elements=x, n_random_starts=n_random_starts)  # Slow...
+            get_estimates(params0=params0, n_panel_elements=x, n_random_starts=n_random_starts)  # Slow...
         })
         message("done, time is ", Sys.time())
         message("saving ", outfile)

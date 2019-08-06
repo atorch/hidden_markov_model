@@ -1,5 +1,10 @@
 # Hidden Markov Model Simulations
 
+This repo includes both Python and R code for simulating data from a hidden Markov model
+and estimating parameters using Expectation-Maximization (EM) and Minimum Distance (MD) estimators.
+
+## Python Simulations
+
 Install docker and then run the following:
 
 ```bash
@@ -11,6 +16,10 @@ python src/simulation.py --simulation simple_two_states
 python src/simulation.py --simulation simple_three_states
 python src/simulation.py --simulation time_varying
 ```
+
+## R Simulations
+
+TODO Put the .R code in its own directory, document here.
 
 # References
 
