@@ -12,9 +12,9 @@ export DOCKER_TAG=hidden_markov_model_docker
 sudo docker build ~/hidden_markov_model --tag=$DOCKER_TAG
 sudo docker run -it -v ~/hidden_markov_model:/home/hidden_markov_model $DOCKER_TAG bash
 cd /home/hidden_markov_model
-python src/simulation.py --simulation simple_two_states
-python src/simulation.py --simulation simple_three_states
-python src/simulation.py --simulation time_varying
+python src/python/simulation.py --simulation simple_two_states
+python src/python/simulation.py --simulation simple_three_states
+python src/python/simulation.py --simulation time_varying
 ```
 
 ## R Simulations
@@ -23,7 +23,7 @@ TODO Put the .R code in its own directory, document here.
 
 # References
 
-The expectation-maximization (EM) and Viterbi code in [src/estimation.py](src/estimation.py)
+The expectation-maximization (EM) and Viterbi code in [src/python/estimation.py](src/python/estimation.py)
 is based on https://web.math.princeton.edu/~rvan/orf557/hmm080728.pdf,
 with modifications to allow for time-varying transition probabilities and panel datasets.
 The most relevant sections in Ramon van Handel's HMM notes are
