@@ -4,8 +4,6 @@ library(grid)
 library(latex2exp)  # For ggplot2 xlab
 library(Rsolnp)
 
-## Variables defined in this simulation can be reference in latex documents using \Sexpr
-
 source("hmm_functions.R")
 source("hmm_parameters.R")
 source("ggplot_utils.R")

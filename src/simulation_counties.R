@@ -6,6 +6,8 @@ n_time_periods <- 5
 n_points_per_county <- 2000
 n_counties <- 10
 
+county_df_outfile <- "county_simulation.csv"
+
 set.seed(998877)
 
 get_deforestation_probability <- function(x, county_fixed_effect) {
@@ -113,6 +115,8 @@ county_df[, y_true := log(true_deforestation_probability)]
 county_df[, y_naive:= log(estimated_deforestation_probability_naive)]
 county_df[, y_hmm := log(estimated_deforestation_probability_hmm)]
 county_df[, y_md := log(estimated_deforestation_probability_md)]
+
+write.csv(county_df, county_df_outfile, row.names=FALSE)
 
 with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_naive)); abline(a=0, b=1, lty=2)
 with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_hmm)); abline(a=0, b=1, lty=2)
