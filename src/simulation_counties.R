@@ -2,9 +2,11 @@ library(data.table)
 
 source("hmm_functions.R")
 
-n_time_periods <- 4
-n_points_per_county <- 1000
-n_counties <- 2
+n_time_periods <- 5
+n_points_per_county <- 2000
+n_counties <- 10
+
+set.seed(998877)
 
 get_deforestation_probability <- function(x, county_fixed_effect) {
 
@@ -35,6 +37,11 @@ get_P_list <- function(county_fixed_effect, county_X) {
     return(P_list)
 }
 
+get_deforestation_prob_from_P <- function(P) {
+    ## Note: this assumes we have 2 hidden states, and state 1 is forest
+    return(P[1, 2])
+}
+
 simulate_single_county <- function(county_id, n_time_periods, n_points_per_county) {
 
     county_fixed_effect <- rnorm(1)
@@ -42,7 +49,7 @@ simulate_single_county <- function(county_id, n_time_periods, n_points_per_count
     ## Note: X is an observed predictor that varies by (county, time)
     county_X <- rnorm(n_time_periods)
 
-    ## Note: for now, every county has the same initial distribution over hidden states
+    ## Note: for now, every county has the same initial distribution over hidden states (mu)
     county_params <- list(n_components=2,
                           mu=c(0.9, 0.1))
 
@@ -76,34 +83,50 @@ county_dfs <- lapply(counties, function(county) {
 
     ## TODO Also return naive, MD and EM deforestation probability estimates
 
-    true_deforestation_probability <- sapply(county$params$P_list, function(P) {
-        return(P[1, 2])
-    })
+    true_deforestation_prob <- sapply(county$params$P_list,
+                                      get_deforestation_prob_from_P)
 
-    estimated_deforestation_probability_hmm <- sapply(county$estimates$hmm_params_hat_best_likelihood$P_list, function(P) {
-        return(P[1, 2])
-    })
+    estimated_deforestation_prob_hmm <- sapply(county$estimates$hmm_params_hat_best_likelihood$P_list,
+                                               get_deforestation_prob_from_P)
+
+    estimated_deforestation_prob_md <- sapply(county$estimates$min_dist_params_hat_best_objfn$P_list,
+                                              get_deforestation_prob_from_P)
+
+    P_hat_naive <- lapply(county$estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
+    estimate_deforestation_prob_naive <- sapply(P_hat_naive, get_deforestation_prob_from_P)
 
     return(data.table(x=county$X,
                       fixed_effect=county$fixed_effect,
                       time=seq_along(county$X),
                       county_id=county$id,
-                      true_deforestation_probability=true_deforestation_probability,
-                      estimated_deforestation_probability_hmm=estimated_deforestation_probability_hmm))
+                      true_deforestation_probability=true_deforestation_prob,
+                      estimated_deforestation_probability_naive=estimate_deforestation_prob_naive,
+                      estimated_deforestation_probability_hmm=estimated_deforestation_prob_hmm,
+                      estimated_deforestation_probability_md=estimated_deforestation_prob_md))
 })
 
 county_df <- rbindlist(county_dfs)
 setkey(county_df, county_id)
 
 county_df[, county_id_factor := factor(county_id)]
-county_df[, true_y := log(true_deforestation_probability)]
-county_df[, hmm_y := log(estimated_deforestation_probability_hmm)]
+county_df[, y_true := log(true_deforestation_probability)]
+county_df[, y_naive:= log(estimated_deforestation_probability_naive)]
+county_df[, y_hmm := log(estimated_deforestation_probability_hmm)]
+county_df[, y_md := log(estimated_deforestation_probability_md)]
 
+with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_naive)); abline(a=0, b=1, lty=2)
 with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_hmm)); abline(a=0, b=1, lty=2)
+with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_md)); abline(a=0, b=1, lty=2)
 
-summary(lm(true_y ~ x + county_id_factor, data=county_df))
+## Note: the constant term (intercept) in this regression includes the estimated fixed effect for county 1
+summary(lm(y_true ~ x + county_id_factor, data=county_df))
 
-# Note: this should recover the coefficients in get_deforestation_probability
-summary(lm(true_y ~ x + fixed_effect, data=county_df))
+## Note: this should recover the coefficients in get_deforestation_probability
+summary(lm(y_true ~ x + fixed_effect, data=county_df))
 
-## TODO Estimate relationship between county_X and deforestation rate (using naive, EM, and MD estimators)
+## Note: the coefficients on both x and fixed_effect appear biased relative to the true coefficients in get_deforestation_probability
+summary(lm(y_naive ~ x + fixed_effect, data=county_df))
+
+## TODO Do these work better than y_naive?
+summary(lm(y_hmm ~ x + fixed_effect, data=county_df))
+summary(lm(y_md ~ x + fixed_effect, data=county_df))
