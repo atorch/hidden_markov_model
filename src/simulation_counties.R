@@ -83,8 +83,6 @@ counties <- lapply(seq_len(n_counties), function(n) {
 
 county_dfs <- lapply(counties, function(county) {
 
-    ## TODO Also return naive, MD and EM deforestation probability estimates
-
     true_deforestation_prob <- sapply(county$params$P_list,
                                       get_deforestation_prob_from_P)
 
