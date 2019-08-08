@@ -5,6 +5,7 @@ and estimating parameters using Expectation-Maximization (EM) and Minimum Distan
 
 ## Python Simulations
 
+The Python code is in [src/python](src/python).
 Install docker and then run the following:
 
 ```bash
