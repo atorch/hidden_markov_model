@@ -2,9 +2,9 @@ library(data.table)
 
 source("hmm_functions.R")
 
-n_time_periods <- 5
+n_time_periods <- 10
 n_points_per_county <- 2000
-n_counties <- 10
+n_counties <- 20
 
 county_df_outfile <- "county_simulation.csv"
 
@@ -111,11 +111,13 @@ county_df <- rbindlist(county_dfs)
 setkey(county_df, county_id)
 
 county_df[, county_id_factor := factor(county_id)]
-county_df[, y_true := log(true_deforestation_probability)]
-county_df[, y_naive:= log(estimated_deforestation_probability_naive)]
-county_df[, y_hmm := log(estimated_deforestation_probability_hmm)]
-county_df[, y_md := log(estimated_deforestation_probability_md)]
+county_df[, y_true := log(true_deforestation_probability / (1 - true_deforestation_probability))]
+county_df[, y_naive:= log(estimated_deforestation_probability_naive / (1 - estimated_deforestation_probability_naive))]
+county_df[, y_hmm := log(estimated_deforestation_probability_hmm / (1 - estimated_deforestation_probability_hmm))]
+county_df[, y_md := log(estimated_deforestation_probability_md / (1 - estimated_deforestation_probability_md))]
 
+## Note: if you want to skip the simulation,
+## you can load county_df_outfile and run the regressions (lm) in the lines below
 write.csv(county_df, county_df_outfile, row.names=FALSE)
 
 with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_naive)); abline(a=0, b=1, lty=2)
@@ -125,12 +127,13 @@ with(county_df, plot(true_deforestation_probability, estimated_deforestation_pro
 ## Note: the constant term (intercept) in this regression includes the estimated fixed effect for county 1
 summary(lm(y_true ~ x + county_id_factor, data=county_df))
 
-## Note: this should recover the coefficients in get_deforestation_probability
+## Note: this should (exactly) recover the coefficients in get_deforestation_probability
 summary(lm(y_true ~ x + fixed_effect, data=county_df))
 
 ## Note: the coefficients on both x and fixed_effect appear biased relative to the true coefficients in get_deforestation_probability
 summary(lm(y_naive ~ x + fixed_effect, data=county_df))
 
 ## TODO Do these work better than y_naive?
+## Looks like they do, but why are the std errors so much larger (especially for y_md)?
 summary(lm(y_hmm ~ x + fixed_effect, data=county_df))
 summary(lm(y_md ~ x + fixed_effect, data=county_df))
