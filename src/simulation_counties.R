@@ -1,4 +1,5 @@
 library(data.table)
+library(parallel)
 
 source("hmm_functions.R")
 
@@ -7,6 +8,8 @@ n_points_per_county <- 2000
 n_counties <- 20
 
 county_df_outfile <- "county_simulation.csv"
+
+max_cores <- 12
 
 set.seed(998877)
 
@@ -77,9 +80,32 @@ simulate_single_county <- function(county_id, n_time_periods, n_points_per_count
                 id=county_id))
 }
 
-counties <- lapply(seq_len(n_counties), function(n) {
+num_cores <- min(detectCores(), max_cores)
+cluster <- makeCluster(num_cores)  # Call stopCluster when done
+
+clusterExport(cluster, c("baum_welch",
+                         "em_parameter_estimates",
+                         "eq_function_minimum_distance",
+                         "get_P_list",
+                         "get_deforestation_probability",
+                         "get_deforestation_prob_from_P",
+                         "get_hmm_and_minimum_distance_estimates_random_initialization",
+                         "get_random_initial_parameters",
+                         "get_transition_probs_from_M_S_joint",
+                         "n_points_per_county",
+                         "n_time_periods",
+                         "objfn_minimum_distance",
+                         "simulate_discrete_markov",
+                         "simulate_hmm",
+                         "simulate_single_county",
+                         "valid_panel_element",
+                         "valid_parameters"))
+
+counties <- parLapply(cluster, seq_len(n_counties), function(n) {
     simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county)
 })
+
+stopCluster(cluster)
 
 county_dfs <- lapply(counties, function(county) {
 

@@ -266,13 +266,17 @@ viterbi_path <- function(panel_element, params) {
 }
 
 apply_viterbi_path_in_parallel <- function(panel, params_hat, max_cores=30) {
+
     ## Apply viterbi to every element in panel
     num_cores <- min(detectCores(), max_cores)
     cluster <- makeCluster(num_cores)  # Call stopCluster when done
+
     vars_to_export <- c("viterbi_path", "valid_panel_element", "valid_parameters")
     clusterExport(cl=cluster, varlist=vars_to_export, envir=.GlobalEnv)
+
     list_of_viterbi_paths <- parLapply(cluster, panel, viterbi_path, params=params_hat)
     stopCluster(cluster)
+
     return(list_of_viterbi_paths)
 }
 
