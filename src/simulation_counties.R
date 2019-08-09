@@ -4,8 +4,8 @@ library(parallel)
 source("hmm_functions.R")
 
 n_time_periods <- 10
-n_points_per_county <- 2000
-n_counties <- 20
+n_points_per_county <- 2500
+n_counties <- 40
 
 county_df_outfile <- "county_simulation.csv"
 
