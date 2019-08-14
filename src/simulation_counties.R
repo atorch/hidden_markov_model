@@ -5,7 +5,7 @@ source("hmm_functions.R")
 
 n_time_periods <- 10
 n_points_per_county <- 2500
-n_counties <- 40
+n_counties <- 50
 
 county_df_outfile <- "county_simulation.csv"
 
@@ -112,8 +112,8 @@ county_dfs <- lapply(counties, function(county) {
     true_deforestation_prob <- sapply(county$params$P_list,
                                       get_deforestation_prob_from_P)
 
-    estimated_deforestation_prob_hmm <- sapply(county$estimates$hmm_params_hat_best_likelihood$P_list,
-                                               get_deforestation_prob_from_P)
+    estimated_deforestation_prob_em <- sapply(county$estimates$hmm_params_hat_best_likelihood$P_list,
+                                              get_deforestation_prob_from_P)
 
     estimated_deforestation_prob_md <- sapply(county$estimates$min_dist_params_hat_best_objfn$P_list,
                                               get_deforestation_prob_from_P)
@@ -121,43 +121,62 @@ county_dfs <- lapply(counties, function(county) {
     P_hat_naive <- lapply(county$estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
     estimate_deforestation_prob_naive <- sapply(P_hat_naive, get_deforestation_prob_from_P)
 
+    ## EM means expectation-maximization, MD means minimum distance
     return(data.table(x=county$X,
                       fixed_effect=county$fixed_effect,
                       time=seq_along(county$X),
                       county_id=county$id,
                       true_deforestation_probability=true_deforestation_prob,
                       estimated_deforestation_probability_naive=estimate_deforestation_prob_naive,
-                      estimated_deforestation_probability_hmm=estimated_deforestation_prob_hmm,
+                      estimated_deforestation_probability_em=estimated_deforestation_prob_em,
                       estimated_deforestation_probability_md=estimated_deforestation_prob_md))
 })
 
 county_df <- rbindlist(county_dfs)
-setkey(county_df, county_id)
+
+## Note: this sorts county_df first by county_id and then by time,
+## the sort order is necessary for computing first differences correctly
+setkey(county_df, county_id, time)
 
 county_df[, county_id_factor := factor(county_id)]
 county_df[, y_true := log(true_deforestation_probability / (1 - true_deforestation_probability))]
 county_df[, y_naive:= log(estimated_deforestation_probability_naive / (1 - estimated_deforestation_probability_naive))]
-county_df[, y_hmm := log(estimated_deforestation_probability_hmm / (1 - estimated_deforestation_probability_hmm))]
+county_df[, y_em := log(estimated_deforestation_probability_em / (1 - estimated_deforestation_probability_em))]
 county_df[, y_md := log(estimated_deforestation_probability_md / (1 - estimated_deforestation_probability_md))]
+
+## TODO Run first diff regressions
+county_df[, x_first_diff := c(NA, diff(x)), by="county_id"]
+county_df[, y_true_first_diff := c(NA, diff(y_true)), by="county_id"]
+county_df[, y_naive_first_diff := c(NA, diff(y_naive)), by="county_id"]
+county_df[, y_em_first_diff := c(NA, diff(y_em)), by="county_id"]
+county_df[, y_md_first_diff := c(NA, diff(y_md)), by="county_id"]
 
 ## Note: if you want to skip the simulation,
 ## you can load county_df_outfile and run the regressions (lm) in the lines below
 write.csv(county_df, county_df_outfile, row.names=FALSE)
 
 with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_naive)); abline(a=0, b=1, lty=2)
-with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_hmm)); abline(a=0, b=1, lty=2)
+with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_em)); abline(a=0, b=1, lty=2)
 with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_md)); abline(a=0, b=1, lty=2)
 
-## Note: the constant term (intercept) in this regression includes the estimated fixed effect for county 1
-summary(lm(y_true ~ x + county_id_factor, data=county_df))
-
+## Note: the constant term (intercept) in the county_id_factor regression includes the estimated fixed effect for county 1
 ## Note: this should (exactly) recover the coefficients in get_deforestation_probability
+## Note: the 0 in the first diff regression formula means there is no constant (since there are no time effects in get_deforestation_probability)
+summary(lm(y_true ~ x + county_id_factor, data=county_df))
 summary(lm(y_true ~ x + fixed_effect, data=county_df))
+summary(lm(y_true_first_diff ~ 0 + x_first_diff, data=county_df))
 
 ## Note: the coefficients on both x and fixed_effect appear biased relative to the true coefficients in get_deforestation_probability
 summary(lm(y_naive ~ x + fixed_effect, data=county_df))
+summary(lm(y_naive ~ x + county_id_factor, data=county_df))
+summary(lm(y_naive_first_diff ~ 0 + x_first_diff, data=county_df))
 
-## TODO Do these work better than y_naive?
-## Looks like they do, but why are the std errors so much larger (especially for y_md)?
-summary(lm(y_hmm ~ x + fixed_effect, data=county_df))
+## Looks like both y_em and y_md work better than y_naive,
+## but why are the std errors so much larger (especially for y_md)?
+summary(lm(y_em ~ x + fixed_effect, data=county_df))
+summary(lm(y_em ~ x + county_id_factor, data=county_df))
+summary(lm(y_em_first_diff ~ 0 + x_first_diff, data=county_df))
+
 summary(lm(y_md ~ x + fixed_effect, data=county_df))
+summary(lm(y_md ~ x + county_id_factor, data=county_df))
+summary(lm(y_md_first_diff ~ 0 + x_first_diff, data=county_df))
