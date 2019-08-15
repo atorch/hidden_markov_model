@@ -1,4 +1,5 @@
 library(data.table)
+library(stargazer)
 library(parallel)
 
 source("hmm_functions.R")
@@ -8,6 +9,7 @@ n_points_per_county <- 2500
 n_counties <- 50
 
 county_df_outfile <- "county_simulation.csv"
+regression_summary_outfile <- "county_simulation_regressions.tex"
 
 max_cores <- 12
 
@@ -180,3 +182,16 @@ summary(lm(y_em_first_diff ~ 0 + x_first_diff, data=county_df))
 summary(lm(y_md ~ x + fixed_effect, data=county_df))
 summary(lm(y_md ~ x + county_id_factor, data=county_df))
 summary(lm(y_md_first_diff ~ 0 + x_first_diff, data=county_df))
+
+## Save model objects so that we can pass them to stargazer (and save latex tables)
+model_naive <- lm(y_naive ~ x + county_id_factor, data=county_df)
+model_em <- lm(y_em ~ x + county_id_factor, data=county_df)
+model_md <- lm(y_md ~ x + county_id_factor, data=county_df)
+
+stargazer(model_naive,
+          model_em,
+          model_md,
+          keep=c("x"),
+          title="Table Title",
+          out=regression_summary_outfile,
+          notes=c("Estimates of county fixed effects are omitted"))
