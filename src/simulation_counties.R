@@ -6,7 +6,7 @@ source("hmm_functions.R")
 
 n_time_periods <- 10
 n_points_per_county <- 2500
-n_counties <- 50
+n_counties <- 100
 
 county_df_outfile <- "county_simulation.csv"
 regression_summary_outfile <- "county_simulation_regressions.tex"
@@ -86,12 +86,13 @@ num_cores <- min(detectCores(), max_cores)
 cluster <- makeCluster(num_cores)  # Call stopCluster when done
 
 clusterExport(cluster, c("baum_welch",
-                         "em_parameter_estimates",
                          "eq_function_minimum_distance",
                          "get_P_list",
-                         "get_deforestation_probability",
                          "get_deforestation_prob_from_P",
+                         "get_deforestation_probability",
+                         "get_expectation_minimization_estimates",
                          "get_hmm_and_minimum_distance_estimates_random_initialization",
+                         "get_min_distance_estimates",
                          "get_random_initial_parameters",
                          "get_transition_probs_from_M_S_joint",
                          "n_points_per_county",
@@ -114,7 +115,7 @@ county_dfs <- lapply(counties, function(county) {
     true_deforestation_prob <- sapply(county$params$P_list,
                                       get_deforestation_prob_from_P)
 
-    estimated_deforestation_prob_em <- sapply(county$estimates$hmm_params_hat_best_likelihood$P_list,
+    estimated_deforestation_prob_em <- sapply(county$estimates$em_params_hat_best_likelihood$P_list,
                                               get_deforestation_prob_from_P)
 
     estimated_deforestation_prob_md <- sapply(county$estimates$min_dist_params_hat_best_objfn$P_list,

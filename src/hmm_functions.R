@@ -26,6 +26,48 @@ get_random_initial_parameters <- function(params0) {
     return(initial_parameters)
 }
 
+get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
+
+    M_S_joint_list_initial <- lapply(seq_along(initial_params$P_list), function(time_index) {
+        ## Joint distribution of S_t, S_{t+1} implied by initial params
+        if(time_index == 1) {
+            mu_t <- initial_params$mu  # Equals initial distribution when t=1
+        } else {
+            mu_t <- initial_params$mu %*% Reduce("%*%", initial_params$P_list[seq_len(time_index- 1)])
+        }
+        stopifnot(isTRUE(all.equal(sum(mu_t), 1)))  # Valid probability distribution, careful comparing floats
+        return(t(initial_params$P_list[[time_index]] * matrix(mu_t, length(mu_t), length(mu_t))))
+    })
+
+    x_guess1 <- c(t(initial_params$pr_y), c(M_S_joint_list_initial, recursive=TRUE))
+    max_time <- max(dtable$time)
+
+    n_components <- initial_params$n_components
+
+    solnp_result1 <- solnp(x_guess1,
+                           fun=objfn_minimum_distance, eqfun=eq_function_minimum_distance,
+                           eqB=rep(1, n_components + max(dtable$time) - 1),
+                           LB=rep(0, length(x_guess1)),
+                           UB=rep(1, length(x_guess1)),
+                           M_Y_joint_hat_list=M_Y_joint_hat_list,
+                           M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
+                           M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
+                           max_time=max_time,
+                           n_components=n_components,
+                           control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
+    M_Y_given_S_hat1 <- matrix(solnp_result1$pars[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
+    M_S_joint_list_hat1 <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
+        return(matrix(solnp_result1$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
+    })
+    min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat1),
+                                P_list=lapply(M_S_joint_list_hat1, get_transition_probs_from_M_S_joint),
+                                convergence=solnp_result1$convergence,
+                                objfn_values=solnp_result1$values)  # Choose estimates with lowest objfn values
+
+    return(min_dist_params_hat)
+
+}
+
 get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, panel, n_random_starts=5) {
 
     ## Params0 are true HMM parameters used to generate data
@@ -35,10 +77,10 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
 
     random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
 
-    hmm_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-        return(em_parameter_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
+    em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
+        return(get_expectation_minimization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
     })
-    likelihoods <- sapply(hmm_params_hat_list, function(x) {
+    likelihoods <- sapply(em_params_hat_list, function(x) {
         return(max(x$loglik))
     })
 
@@ -59,7 +101,8 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
         with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
     })  # Joint distribution of (Y_{t+1}, Y_{t}) and (Y_{t+2}, Y_{t+1})
 
-    M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)  # Compute inverses once, before running solnp
+    ## Compute inverses once and pass them to get_min_distance_estimates / solnp
+    M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
 
     M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
         lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
@@ -68,43 +111,12 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
         })
     })  # TODO Need to handle edge case where any of these matrices are not invertible, might happen at small sample sizes
 
-    min_dist_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-        M_S_joint_list_initial <- lapply(seq_along(initial_params$P_list), function(time_index) {
-            ## Joint distribution of S_t, S_{t+1} implied by initial params
-            if(time_index == 1) {
-                mu_t <- initial_params$mu  # Equals initial distribution when t=1
-            } else {
-                mu_t <- initial_params$mu %*% Reduce("%*%", initial_params$P_list[seq_len(time_index- 1)])
-            }
-            stopifnot(isTRUE(all.equal(sum(mu_t), 1)))  # Valid probability distribution, careful comparing floats
-            return(t(initial_params$P_list[[time_index]] * matrix(mu_t, length(mu_t), length(mu_t))))
-        })
-
-        x_guess1 <- c(t(initial_params$pr_y), c(M_S_joint_list_initial, recursive=TRUE))
-        max_time <- max(dtable$time)
-
-        solnp_result1 <- solnp(x_guess1,
-                               fun=objfn_minimum_distance, eqfun=eq_function_minimum_distance,
-                               eqB=rep(1, params0$n_components + max(dtable$time) - 1),
-                               LB=rep(0, length(x_guess1)),
-                               UB=rep(1, length(x_guess1)),
-                               M_Y_joint_hat_list=M_Y_joint_hat_list,
-                               M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
-                               M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
-                               max_time=max_time,
-                               n_components=params0$n_components,
-                               control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
-        M_Y_given_S_hat1 <- matrix(solnp_result1$pars[seq(1, params0$n_components^2)], params0$n_components, params0$n_components)  # Transpose of params0$pr_y
-        M_S_joint_list_hat1 <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
-            return(matrix(solnp_result1$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
-
-        })
-        min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat1),
-                                    P_list=lapply(M_S_joint_list_hat1, get_transition_probs_from_M_S_joint),
-                                    convergence=solnp_result1$convergence,
-                                    objfn_values=solnp_result1$values)  # Choose estimates with lowest objfn values
-        return(min_dist_params_hat)
-    })
+    min_dist_params_hat_list <- lapply(random_initial_parameters,
+                                       get_min_distance_estimates,
+                                       M_Y_joint_hat_list=M_Y_joint_hat_list,
+                                       M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
+                                       M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
+                                       dtable=dtable)
 
     objfn_values <- sapply(min_dist_params_hat_list, function(x) {
         return(min(x$objfn_values))
@@ -112,10 +124,10 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
 
     return(list("panel_size"=length(panel),
                 "M_Y_joint_hat"=M_Y_joint_hat_list,
-                "hmm_params_hat_list"=hmm_params_hat_list,
+                "em_params_hat_list"=em_params_hat_list,
                 "hmm_params_hat_loglikelihoods"=likelihoods,
                 "initial_parameters_list"=random_initial_parameters,
-                "hmm_params_hat_best_likelihood"=hmm_params_hat_list[[which.max(likelihoods)]],
+                "em_params_hat_best_likelihood"=em_params_hat_list[[which.max(likelihoods)]],
                 "min_dist_params_hat_list"=min_dist_params_hat_list,
                 "min_dist_objfn_values"=objfn_values,
                 "min_dist_params_hat_best_objfn"=min_dist_params_hat_list[[which.min(objfn_values)]]))
@@ -349,7 +361,7 @@ baum_welch <- function(panel_element, params) {
     return(list(loglik=loglik, pi=pi, pi_transition_list=pi_transition_list))
 }
 
-em_parameter_estimates <- function(panel, params, max_iter, epsilon=0.001) {
+get_expectation_minimization_estimates <- function(panel, params, max_iter, epsilon=0.001) {
     ## EM for panel of independent HMM realizations; stop at max_iter or distance < epsilon
     ## Written following Ramon van Handel's HMM notes page 87, algorithm 6.1, modified for panel data
     ## https://www.princeton.edu/~rvan/orf557/hmm080728.pdf

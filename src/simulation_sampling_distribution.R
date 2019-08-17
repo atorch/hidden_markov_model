@@ -28,20 +28,21 @@ cluster <- makeCluster(detectCores())
 n_replications <- 100
 n_random_starts <- 6
 outfile_format <- "simulation_sampling_distribution_with_%s_random_initial_parameters_panel_size_%s_%s_replications.rds"
-clusterExport(cluster, c("get_random_initial_parameters",
-                         "get_estimates",
-                         "get_hmm_and_minimum_distance_estimates_random_initialization",
-                         "em_parameter_estimates",
-                         "baum_welch",
-                         "objfn_minimum_distance",
+clusterExport(cluster, c("baum_welch",
                          "eq_function_minimum_distance",
+                         "get_estimates",
+                         "get_expectation_minimization_estimates",
+                         "get_hmm_and_minimum_distance_estimates_random_initialization",
+                         "get_min_distance_estimates",
+                         "get_random_initial_parameters",
                          "get_transition_probs_from_M_S_joint",
-                         "simulate_hmm",
-                         "simulate_discrete_markov",
-                         "valid_panel_element",
-                         "valid_parameters",
+                         "n_random_starts",
+                         "objfn_minimum_distance",
                          "params0",
-                         "n_random_starts"))
+                         "simulate_discrete_markov",
+                         "simulate_hmm",
+                         "valid_panel_element",
+                         "valid_parameters"))
 
 panel_sizes <- c(100, 200, 500, 1000, 5000, 10000)  # Slow, panel size 5000 took 22 hours on my laptop (4 CPUs)
 panel_sizes <- c(100, 200, 500, 1000)
@@ -70,16 +71,16 @@ stopifnot(all(sapply(all_simulations, length) == n_replications))
 
 dataframes <- lapply(all_simulations, function(replications) {
     df <- data.frame(panel_size=sapply(replications, function(replication) {
-        return(replication$hmm_params_hat_best_likelihood$panel_size)
+        return(replication$em_params_hat_best_likelihood$panel_size)
     }),
-    hmm_params_hat_n_iterations=sapply(replications, function(replication) {
-        return(replication$hmm_params_hat_best_likelihood$n_em_iterations)
+    em_params_hat_n_iterations=sapply(replications, function(replication) {
+        return(replication$em_params_hat_best_likelihood$n_em_iterations)
     }),
-    hmm_params_hat_pr_y_11=sapply(replications, function(replication) {
-        return(replication$hmm_params_hat_best_likelihood$pr_y[1, 1])
+    em_params_hat_pr_y_11=sapply(replications, function(replication) {
+        return(replication$em_params_hat_best_likelihood$pr_y[1, 1])
     }),
-    hmm_params_hat_pr_y_22=sapply(replications, function(replication) {
-        return(replication$hmm_params_hat_best_likelihood$pr_y[2, 2])
+    em_params_hat_pr_y_22=sapply(replications, function(replication) {
+        return(replication$em_params_hat_best_likelihood$pr_y[2, 2])
     }),
     min_dist_params_hat_pr_y_11=sapply(replications, function(replication) {
         return(replication$min_dist_params_hat_best_objfn$pr_y[1, 1])
@@ -88,9 +89,9 @@ dataframes <- lapply(all_simulations, function(replications) {
         return(replication$min_dist_params_hat_best_objfn$pr_y[2, 2])
     }))
     for(time_index in seq_along(params0$P_list)) {
-        varname <- sprintf("hmm_params_hat_P%s_11", time_index)
+        varname <- sprintf("em_params_hat_P%s_11", time_index)
         df[, varname] <- sapply(replications, function(replication) {
-            return(replication$hmm_params_hat_best_likelihood$P_list[[time_index]][1, 1])
+            return(replication$em_params_hat_best_likelihood$P_list[[time_index]][1, 1])
         })
         varname <- sprintf("min_dist_params_hat_P%s_11", time_index)
         df[, varname] <- sapply(replications, function(replication) {
@@ -158,7 +159,7 @@ sum(P_hat_range_min_dist > 0.01)  # 60 simulations out of length(P_hat_range_min
 sum(P_hat_range_min_dist > 0.10)  # 37 simulations out of length(P_hat_range_min_dist)=1200 where P_hat differs by more than 0.10 across initializations
 P_hat_range_em <- c(lapply(all_simulations, function(list_of_replications) {
     sapply(list_of_replications, function(replication) {
-        matrix_of_P_hat <- sapply(replication$hmm_params_hat_list, function(x) {
+        matrix_of_P_hat <- sapply(replication$em_params_hat_list, function(x) {
             return(c(x$P_list, recursive=TRUE))
         })
         P_hat_range <- max(apply(matrix_of_P_hat, 1, max) - apply(matrix_of_P_hat, 1, min))
@@ -171,21 +172,21 @@ sum(P_hat_range_em > 0.10)  # 394 simulations out of length(P_hat_range_em)=1200
 ## RMSE of each estimator as fn of sample size
 dtable <- data.table(df)
 setkey(dtable, panel_size)
-with(subset(dtable, panel_size <= 5000), t.test(x=(hmm_params_hat_pr_y_11 - params0$pr_y[1, 1])^2,
+with(subset(dtable, panel_size <= 5000), t.test(x=(em_params_hat_pr_y_11 - params0$pr_y[1, 1])^2,
                                                 y=(min_dist_params_hat_pr_y_11 - params0$pr_y[1, 1])^2))  # P-value 0.02
-with(subset(dtable, panel_size <= 5000), t.test(x=(hmm_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2,
+with(subset(dtable, panel_size <= 5000), t.test(x=(em_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2,
                                                 y=(min_dist_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2))  # P-value 0.11
-with(subset(dtable, panel_size <= 5000), t.test(x=(hmm_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2,
+with(subset(dtable, panel_size <= 5000), t.test(x=(em_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2,
                                                 y=(min_dist_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2))  # P-value 0.09
-with(subset(dtable, panel_size <= 5000), t.test(x=(hmm_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2,
+with(subset(dtable, panel_size <= 5000), t.test(x=(em_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2,
                                                 y=(min_dist_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2))  # P-value 0.004
-dtable_rmses <- dtable[, list(rmse_hmm_pr_y_11=sqrt(mean((hmm_params_hat_pr_y_11 - params0$pr_y[1, 1])^2)),
+dtable_rmses <- dtable[, list(rmse_hmm_pr_y_11=sqrt(mean((em_params_hat_pr_y_11 - params0$pr_y[1, 1])^2)),
                               rmse_min_dist_pr_y_11=sqrt(mean((min_dist_params_hat_pr_y_11 - params0$pr_y[1, 1])^2, na.rm=TRUE)),
-                              rmse_hmm_P1_11=sqrt(mean((hmm_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2)),
+                              rmse_hmm_P1_11=sqrt(mean((em_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2)),
                               rmse_min_dist_P1_11=sqrt(mean((min_dist_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2, na.rm=TRUE)),
-                              rmse_hmm_P2_11=sqrt(mean((hmm_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2)),
+                              rmse_hmm_P2_11=sqrt(mean((em_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2)),
                               rmse_min_dist_P2_11=sqrt(mean((min_dist_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2, na.rm=TRUE)),
-                              rmse_hmm_P3_11=sqrt(mean((hmm_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2)),
+                              rmse_hmm_P3_11=sqrt(mean((em_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2)),
                               rmse_min_dist_P3_11=sqrt(mean((min_dist_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2, na.rm=TRUE))),
                        by="panel_size"]
 dtable_melted <- melt(dtable_rmses, id.vars="panel_size")

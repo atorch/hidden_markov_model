@@ -33,7 +33,8 @@ outfile <- "simulation_methodology_params0_hat.rds"
 if(file.exists(outfile)) {
     params0_hat <- readRDS(outfile)
 } else {
-    params0_hat <- em_parameter_estimates(panel, params0, max_iter=20, epsilon=0.001)  # Starting from true parameter values
+    ## Initialize EM at true parameter values (easy case)
+    params0_hat <- get_expectation_minimization_estimates(panel, params0, max_iter=20, epsilon=0.001)
     saveRDS(params0_hat, file=outfile)
 }
 stopifnot(all(diff(params0_hat$loglik) > 0))  # Loglik should be increasing
@@ -44,7 +45,8 @@ outfile <- "simulation_methodology_params1_hat.rds"
 if(file.exists(outfile)) {
     params1_hat <- readRDS(outfile)
 } else {
-    params1_hat <- em_parameter_estimates(panel, params1, max_iter=20, epsilon=0.001)  # Starting from incorrect parameter values
+    ## Initialize EM at incorrect parameter values (more difficult)
+    params1_hat <- get_expectation_minimization_estimates(panel, params1, max_iter=20, epsilon=0.001)
     saveRDS(params1_hat, file=outfile)
 }
 max(abs(c(params1_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
@@ -54,7 +56,8 @@ outfile <- "simulation_methodology_params2_hat.rds"
 if(file.exists(outfile)) {
     params2_hat <- readRDS(outfile)
 } else {
-    params2_hat <- em_parameter_estimates(panel, params2, max_iter=20, epsilon=0.001)  # Starting from "very" incorrect parameter values
+    ## Initialize EM at "very" incorrect parameter values (even more difficult)
+    params2_hat <- get_expectation_minimization_estimates(panel, params2, max_iter=20, epsilon=0.001)
     saveRDS(params2_hat, file=outfile)
 }
 max(abs(c(params2_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
