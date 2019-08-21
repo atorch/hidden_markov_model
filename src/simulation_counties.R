@@ -6,9 +6,9 @@ source("hmm_functions.R")
 
 
 ## Modify this dataframe to vary the number of simulations and the simulation parameters
-simulation_df <- data.frame(n_points_per_county=c(1000, 2000),
-                            n_counties=c(10, 5),
-                            n_time_periods=c(5, 5))
+simulation_df <- data.frame(n_points_per_county=c(1000, 2000, 4000),
+                            n_counties=c(200, 100, 50),
+                            n_time_periods=c(10, 10, 10))
 
 ## Keep track of the estimates from the county regression
 simulation_df$county_regression_naive_beta_hat <- NA
@@ -186,7 +186,8 @@ for (i in seq_len(nrow(simulation_df))) {
     with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_md)); abline(a=0, b=1, lty=2)
 
     ## Note: the constant term (intercept) in the county_id_factor regression includes the estimated fixed effect for county 1
-    ## Note: this should (exactly) recover the coefficients in get_deforestation_probability
+    ## This should (exactly) recover the coefficients in get_deforestation_probability, hence the
+    ## "essentially perfect fit: summary may be unreliable" warning
     ## Note: the 0 in the first diff regression formula means there is no constant (since there are no time effects in get_deforestation_probability)
     summary(lm(y_true ~ x + county_id_factor, data=county_df))
     summary(lm(y_true ~ x + fixed_effect, data=county_df))
