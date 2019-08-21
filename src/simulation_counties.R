@@ -4,12 +4,23 @@ library(parallel)
 
 source("hmm_functions.R")
 
-n_time_periods <- 10
-n_points_per_county <- 2500
-n_counties <- 100
 
-county_df_outfile <- "county_simulation.csv"
-regression_summary_outfile <- "county_simulation_regressions.tex"
+## Modify this dataframe to vary the number of simulations and the simulation parameters
+simulation_df <- data.frame(n_points_per_county=c(1000, 2000),
+                            n_counties=c(10, 5),
+                            n_time_periods=c(5, 5))
+
+## Keep track of the estimates from the county regression
+simulation_df$county_regression_naive_beta_hat <- NA
+simulation_df$county_regression_naive_beta_hat_std_err <- NA
+simulation_df$county_regression_em_beta_hat <- NA
+simulation_df$county_regression_em_beta_hat_std_err <- NA
+simulation_df$county_regression_md_beta_hat <- NA
+simulation_df$county_regression_md_beta_hat_std_err <- NA
+
+county_df_outfile_format <- "county_simulation_%s_points_%s_counties.csv"
+regression_summary_outfile_format <- "county_simulation_regressions_%s_points_%s_counties.tex"
+simulation_df_outfile <- "county_simulations_summary.tex"
 
 max_cores <- 12
 
@@ -51,6 +62,8 @@ get_deforestation_prob_from_P <- function(P) {
 
 simulate_single_county <- function(county_id, n_time_periods, n_points_per_county) {
 
+    message(" simulating county_id ", county_id)
+
     county_fixed_effect <- rnorm(1)
 
     ## Note: X is an observed predictor that varies by (county, time)
@@ -82,35 +95,7 @@ simulate_single_county <- function(county_id, n_time_periods, n_points_per_count
                 id=county_id))
 }
 
-num_cores <- min(detectCores(), max_cores)
-cluster <- makeCluster(num_cores)  # Call stopCluster when done
-
-clusterExport(cluster, c("baum_welch",
-                         "eq_function_minimum_distance",
-                         "get_P_list",
-                         "get_deforestation_prob_from_P",
-                         "get_deforestation_probability",
-                         "get_expectation_minimization_estimates",
-                         "get_hmm_and_minimum_distance_estimates_random_initialization",
-                         "get_min_distance_estimates",
-                         "get_random_initial_parameters",
-                         "get_transition_probs_from_M_S_joint",
-                         "n_points_per_county",
-                         "n_time_periods",
-                         "objfn_minimum_distance",
-                         "simulate_discrete_markov",
-                         "simulate_hmm",
-                         "simulate_single_county",
-                         "valid_panel_element",
-                         "valid_parameters"))
-
-counties <- parLapply(cluster, seq_len(n_counties), function(n) {
-    simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county)
-})
-
-stopCluster(cluster)
-
-county_dfs <- lapply(counties, function(county) {
+get_data_table_summarizing_single_county_simulation <- function(county) {
 
     true_deforestation_prob <- sapply(county$params$P_list,
                                       get_deforestation_prob_from_P)
@@ -133,66 +118,129 @@ county_dfs <- lapply(counties, function(county) {
                       estimated_deforestation_probability_naive=estimate_deforestation_prob_naive,
                       estimated_deforestation_probability_em=estimated_deforestation_prob_em,
                       estimated_deforestation_probability_md=estimated_deforestation_prob_md))
-})
+}
 
-county_df <- rbindlist(county_dfs)
+num_cores <- min(detectCores(), max_cores)
+cluster <- makeCluster(num_cores)  # Call stopCluster when done
 
-## Note: this sorts county_df first by county_id and then by time,
-## the sort order is necessary for computing first differences correctly
-setkey(county_df, county_id, time)
+for (i in seq_len(nrow(simulation_df))) {
 
-county_df[, county_id_factor := factor(county_id)]
-county_df[, y_true := log(true_deforestation_probability / (1 - true_deforestation_probability))]
-county_df[, y_naive:= log(estimated_deforestation_probability_naive / (1 - estimated_deforestation_probability_naive))]
-county_df[, y_em := log(estimated_deforestation_probability_em / (1 - estimated_deforestation_probability_em))]
-county_df[, y_md := log(estimated_deforestation_probability_md / (1 - estimated_deforestation_probability_md))]
+    n_counties <- simulation_df$n_counties[i]
+    n_points_per_county <- simulation_df$n_points_per_county[i]
+    n_time_periods <- simulation_df$n_time_periods[i]
 
-## TODO Run first diff regressions
-county_df[, x_first_diff := c(NA, diff(x)), by="county_id"]
-county_df[, y_true_first_diff := c(NA, diff(y_true)), by="county_id"]
-county_df[, y_naive_first_diff := c(NA, diff(y_naive)), by="county_id"]
-county_df[, y_em_first_diff := c(NA, diff(y_em)), by="county_id"]
-county_df[, y_md_first_diff := c(NA, diff(y_md)), by="county_id"]
+    message("Running simulation with n_counties=", n_counties, " n_points_per_county=", n_points_per_county, " n_time_periods=", n_time_periods)
 
-## Note: if you want to skip the simulation,
-## you can load county_df_outfile and run the regressions (lm) in the lines below
-write.csv(county_df, county_df_outfile, row.names=FALSE)
+    ## Note: only some of these objects change on every loop (e.g. n_points_per_county), others are constant
+    clusterExport(cluster, c("baum_welch",
+                             "eq_function_minimum_distance",
+                             "get_P_list",
+                             "get_deforestation_prob_from_P",
+                             "get_deforestation_probability",
+                             "get_expectation_minimization_estimates",
+                             "get_hmm_and_minimum_distance_estimates_random_initialization",
+                             "get_min_distance_estimates",
+                             "get_random_initial_parameters",
+                             "get_transition_probs_from_M_S_joint",
+                             "n_points_per_county",
+                             "n_time_periods",
+                             "objfn_minimum_distance",
+                             "simulate_discrete_markov",
+                             "simulate_hmm",
+                             "simulate_single_county",
+                             "valid_panel_element",
+                             "valid_parameters"))
 
-with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_naive)); abline(a=0, b=1, lty=2)
-with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_em)); abline(a=0, b=1, lty=2)
-with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_md)); abline(a=0, b=1, lty=2)
+    counties <- parLapply(cluster, seq_len(n_counties), function(n) {
+        simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county)
+    })
 
-## Note: the constant term (intercept) in the county_id_factor regression includes the estimated fixed effect for county 1
-## Note: this should (exactly) recover the coefficients in get_deforestation_probability
-## Note: the 0 in the first diff regression formula means there is no constant (since there are no time effects in get_deforestation_probability)
-summary(lm(y_true ~ x + county_id_factor, data=county_df))
-summary(lm(y_true ~ x + fixed_effect, data=county_df))
-summary(lm(y_true_first_diff ~ 0 + x_first_diff, data=county_df))
+    county_dfs <- lapply(counties, get_data_table_summarizing_single_county_simulation)
 
-## Note: the coefficients on both x and fixed_effect appear biased relative to the true coefficients in get_deforestation_probability
-summary(lm(y_naive ~ x + fixed_effect, data=county_df))
-summary(lm(y_naive ~ x + county_id_factor, data=county_df))
-summary(lm(y_naive_first_diff ~ 0 + x_first_diff, data=county_df))
+    county_df <- rbindlist(county_dfs)
 
-## Looks like both y_em and y_md work better than y_naive,
-## but why are the std errors so much larger (especially for y_md)?
-summary(lm(y_em ~ x + fixed_effect, data=county_df))
-summary(lm(y_em ~ x + county_id_factor, data=county_df))
-summary(lm(y_em_first_diff ~ 0 + x_first_diff, data=county_df))
+    ## Note: this sorts county_df first by county_id and then by time,
+    ## the sort order is necessary for computing first differences correctly
+    setkey(county_df, county_id, time)
 
-summary(lm(y_md ~ x + fixed_effect, data=county_df))
-summary(lm(y_md ~ x + county_id_factor, data=county_df))
-summary(lm(y_md_first_diff ~ 0 + x_first_diff, data=county_df))
+    county_df[, county_id_factor := factor(county_id)]
+    county_df[, y_true := log(true_deforestation_probability / (1 - true_deforestation_probability))]
+    county_df[, y_naive:= log(estimated_deforestation_probability_naive / (1 - estimated_deforestation_probability_naive))]
+    county_df[, y_em := log(estimated_deforestation_probability_em / (1 - estimated_deforestation_probability_em))]
+    county_df[, y_md := log(estimated_deforestation_probability_md / (1 - estimated_deforestation_probability_md))]
 
-## Save model objects so that we can pass them to stargazer (and save latex tables)
-model_naive <- lm(y_naive ~ x + county_id_factor, data=county_df)
-model_em <- lm(y_em ~ x + county_id_factor, data=county_df)
-model_md <- lm(y_md ~ x + county_id_factor, data=county_df)
+    county_df[, x_first_diff := c(NA, diff(x)), by="county_id"]
+    county_df[, y_true_first_diff := c(NA, diff(y_true)), by="county_id"]
+    county_df[, y_naive_first_diff := c(NA, diff(y_naive)), by="county_id"]
+    county_df[, y_em_first_diff := c(NA, diff(y_em)), by="county_id"]
+    county_df[, y_md_first_diff := c(NA, diff(y_md)), by="county_id"]
 
-stargazer(model_naive,
-          model_em,
-          model_md,
-          keep=c("x"),
-          title="Table Title",
-          out=regression_summary_outfile,
-          notes=c("Estimates of county fixed effects are omitted"))
+    ## Note: if you want to skip the simulation,
+    ## you can load county_df_outfile and run the regressions (lm) in the lines below
+    county_df_outfile <- sprintf(county_df_outfile_format, n_points_per_county, n_counties)
+    message("Saving ", county_df_outfile)
+    write.csv(county_df, county_df_outfile, row.names=FALSE)
+
+    with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_naive)); abline(a=0, b=1, lty=2)
+    with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_em)); abline(a=0, b=1, lty=2)
+    with(county_df, plot(true_deforestation_probability, estimated_deforestation_probability_md)); abline(a=0, b=1, lty=2)
+
+    ## Note: the constant term (intercept) in the county_id_factor regression includes the estimated fixed effect for county 1
+    ## Note: this should (exactly) recover the coefficients in get_deforestation_probability
+    ## Note: the 0 in the first diff regression formula means there is no constant (since there are no time effects in get_deforestation_probability)
+    summary(lm(y_true ~ x + county_id_factor, data=county_df))
+    summary(lm(y_true ~ x + fixed_effect, data=county_df))
+    summary(lm(y_true_first_diff ~ 0 + x_first_diff, data=county_df))
+
+    ## Note: the coefficients on both x and fixed_effect appear biased relative to the true coefficients in get_deforestation_probability
+    summary(lm(y_naive ~ x + fixed_effect, data=county_df))
+    summary(lm(y_naive ~ x + county_id_factor, data=county_df))
+    summary(lm(y_naive_first_diff ~ 0 + x_first_diff, data=county_df))
+
+    ## Looks like both y_em and y_md work better than y_naive,
+    ## but why are the std errors so much larger (especially for y_md)?
+    summary(lm(y_em ~ x + fixed_effect, data=county_df))
+    summary(lm(y_em ~ x + county_id_factor, data=county_df))
+    summary(lm(y_em_first_diff ~ 0 + x_first_diff, data=county_df))
+
+    summary(lm(y_md ~ x + fixed_effect, data=county_df))
+    summary(lm(y_md ~ x + county_id_factor, data=county_df))
+    summary(lm(y_md_first_diff ~ 0 + x_first_diff, data=county_df))
+
+    ## Save model objects so that we can pass them to stargazer (and save latex tables)
+    model_naive <- lm(y_naive ~ x + county_id_factor, data=county_df)
+    model_em <- lm(y_em ~ x + county_id_factor, data=county_df)
+    model_md <- lm(y_md ~ x + county_id_factor, data=county_df)
+
+    regression_summary_outfile <- sprintf(regression_summary_outfile_format, n_points_per_county, n_counties)
+    title <- sprintf("Regressions with %s points per county, %s counties", n_points_per_county, n_counties)
+    message("Saving ", regression_summary_outfile)
+    stargazer(model_naive,
+              model_em,
+              model_md,
+              keep=c("x"),
+              title=title,
+              out=regression_summary_outfile,
+              notes=c("Estimates of county fixed effects are omitted"))
+
+    coef_naive <- coef(summary(model_naive))
+    coef_em <- coef(summary(model_em))
+    coef_md <- coef(summary(model_md))
+
+    simulation_df$county_regression_naive_beta_hat[i] <- coef_naive["x", "Estimate"]
+    simulation_df$county_regression_naive_beta_hat_std_err[i] <- coef_naive["x", "Std. Error"]
+
+    simulation_df$county_regression_em_beta_hat[i] <- coef_em["x", "Estimate"]
+    simulation_df$county_regression_em_beta_hat_std_err[i] <- coef_em["x", "Std. Error"]
+
+    simulation_df$county_regression_md_beta_hat[i] <- coef_md["x", "Estimate"]
+    simulation_df$county_regression_md_beta_hat_std_err[i] <- coef_md["x", "Std. Error"]
+
+}
+
+stopCluster(cluster)
+
+stargazer(simulation_df,
+          summary=FALSE,
+          rownames=FALSE,
+          out=simulation_df_outfile)

@@ -7,7 +7,9 @@ get_random_initial_parameters <- function(params0) {
     initial_parameters$P_list <- lapply(params0$P_list, function(correct_P) {
 
         ## Probabilities on diagonals of the transition probability matrices
-        random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
+        ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
+        ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$P_list?
+        random_uniform <- runif(params0$n_components, min=0.70, max=0.98)
 
         P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
         diag(P) <- random_uniform
@@ -16,7 +18,9 @@ get_random_initial_parameters <- function(params0) {
     })
 
     ## Probabilities on the diagonals of the observation probability matrix pr_y
-    random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
+    ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
+    ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$pr_y? 
+    random_uniform <- runif(params0$n_components, min=0.70, max=0.98)
     initial_parameters$pr_y <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$pr_y), ncol=ncol(params0$pr_y))
     diag(initial_parameters$pr_y) <- random_uniform
 
@@ -59,10 +63,12 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
     M_S_joint_list_hat1 <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
         return(matrix(solnp_result1$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
+
+    ## Note: we keep track of the objective function values so that we can pick the best MD estimate (lowest objfn_values)
     min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat1),
                                 P_list=lapply(M_S_joint_list_hat1, get_transition_probs_from_M_S_joint),
                                 convergence=solnp_result1$convergence,
-                                objfn_values=solnp_result1$values)  # Choose estimates with lowest objfn values
+                                objfn_values=solnp_result1$values)
 
     return(min_dist_params_hat)
 
@@ -80,7 +86,7 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
         return(get_expectation_minimization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
     })
-    likelihoods <- sapply(em_params_hat_list, function(x) {
+    em_likelihoods <- sapply(em_params_hat_list, function(x) {
         return(max(x$loglik))
     })
 
@@ -118,19 +124,26 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
                                        M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
                                        dtable=dtable)
 
-    objfn_values <- sapply(min_dist_params_hat_list, function(x) {
+    min_dist_objfn_values <- sapply(min_dist_params_hat_list, function(x) {
         return(min(x$objfn_values))
     })
+
+    ## TODO: the "best" min dist estimates are sometimes "stuck" at the wrong edge of the parameter space,
+    ## e.g. the estimated deforestation probabilities are 100% when the true rate is close to 0%
+    ## Check whether the estimated pr_y is diagonally dominant in these cases!
+    min_dist_params_hat_best_objfn <- min_dist_params_hat_list[[which.min(min_dist_objfn_values)]]
+
+    em_params_hat_best_likelihood <- em_params_hat_list[[which.max(em_likelihoods)]]
 
     return(list("panel_size"=length(panel),
                 "M_Y_joint_hat"=M_Y_joint_hat_list,
                 "em_params_hat_list"=em_params_hat_list,
-                "hmm_params_hat_loglikelihoods"=likelihoods,
+                "hmm_params_hat_loglikelihoods"=em_likelihoods,
                 "initial_parameters_list"=random_initial_parameters,
-                "em_params_hat_best_likelihood"=em_params_hat_list[[which.max(likelihoods)]],
+                "em_params_hat_best_likelihood"=em_params_hat_best_likelihood,
                 "min_dist_params_hat_list"=min_dist_params_hat_list,
-                "min_dist_objfn_values"=objfn_values,
-                "min_dist_params_hat_best_objfn"=min_dist_params_hat_list[[which.min(objfn_values)]]))
+                "min_dist_objfn_values"=min_dist_objfn_values,
+                "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn))
 }
 
 get_transition_probs_from_M_S_joint <- function(M_S_joint) {
