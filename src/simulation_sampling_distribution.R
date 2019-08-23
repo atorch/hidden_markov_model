@@ -106,9 +106,11 @@ df$panel_size_label <- sprintf("%s%s", ifelse(df$panel_size %in% c(100, 1000), "
 df$panel_size_label <- factor(df$panel_size_label,
                               levels=sprintf("%s%s", ifelse(sort(unique(df$panel_size)) %in% c(100, 1000), "sample size = ", ""), sort(unique(df$panel_size))))
 
+estimators <- c("em", "min_dist")
+
 ## Transition probs
 for (time_index in seq_along(params0$P_list)) {
-    for(estimator in c("hmm", "min_dist")) {  # HMM means EM
+    for(estimator in estimators) {
         variable <- sprintf("%s_params_hat_P%s_11", estimator, time_index)
         p <- (ggplot(df, aes_string(x=variable)) +
               geom_vline(xintercept=params0$P_list[[time_index]][1, 1], color="grey", linetype=2) +
@@ -124,7 +126,7 @@ for (time_index in seq_along(params0$P_list)) {
 
 ## Misclassification probs
 for(matrix_index in c("11", "22")) {
-    for(estimator in c("hmm", "min_dist")) {  # HMM means EM
+    for(estimator in estimators) {
         variable <- sprintf("%s_params_hat_pr_y_%s", estimator, matrix_index)
         true_value <- ifelse(matrix_index == "11", params0$pr_y[1, 1], params0$pr_y[2, 2])
         p <- (ggplot(df, aes_string(x=variable)) +
@@ -180,19 +182,19 @@ with(subset(dtable, panel_size <= 5000), t.test(x=(em_params_hat_P2_11 - params0
                                                 y=(min_dist_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2))  # P-value 0.09
 with(subset(dtable, panel_size <= 5000), t.test(x=(em_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2,
                                                 y=(min_dist_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2))  # P-value 0.004
-dtable_rmses <- dtable[, list(rmse_hmm_pr_y_11=sqrt(mean((em_params_hat_pr_y_11 - params0$pr_y[1, 1])^2)),
+dtable_rmses <- dtable[, list(rmse_em_pr_y_11=sqrt(mean((em_params_hat_pr_y_11 - params0$pr_y[1, 1])^2)),
                               rmse_min_dist_pr_y_11=sqrt(mean((min_dist_params_hat_pr_y_11 - params0$pr_y[1, 1])^2, na.rm=TRUE)),
-                              rmse_hmm_P1_11=sqrt(mean((em_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2)),
+                              rmse_em_P1_11=sqrt(mean((em_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2)),
                               rmse_min_dist_P1_11=sqrt(mean((min_dist_params_hat_P1_11 - params0$P_list[[1]][1, 1])^2, na.rm=TRUE)),
-                              rmse_hmm_P2_11=sqrt(mean((em_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2)),
+                              rmse_em_P2_11=sqrt(mean((em_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2)),
                               rmse_min_dist_P2_11=sqrt(mean((min_dist_params_hat_P2_11 - params0$P_list[[2]][1, 1])^2, na.rm=TRUE)),
-                              rmse_hmm_P3_11=sqrt(mean((em_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2)),
+                              rmse_em_P3_11=sqrt(mean((em_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2)),
                               rmse_min_dist_P3_11=sqrt(mean((min_dist_params_hat_P3_11 - params0$P_list[[3]][1, 1])^2, na.rm=TRUE))),
                        by="panel_size"]
 dtable_melted <- melt(dtable_rmses, id.vars="panel_size")
-dtable_melted[, estimator := ifelse(grepl("_hmm_", variable), "EM", "MinDist")]
+dtable_melted[, estimator := ifelse(grepl("_em_", variable), "EM", "MinDist")]
 dtable_melted[, parameter := ifelse(grepl("pr_y_11", variable), "first entry of misclassification matrix",
-                                    sprintf("first entry of %s", gsub("rmse_min_dist_|rmse_hmm_|_11", "", variable)))]
+                                    sprintf("first entry of %s", gsub("rmse_min_dist_|rmse_em_|_11", "", variable)))]
 
 p <- (ggplot(dtable_melted, aes(x=panel_size, y=value, color=estimator)) +
       geom_point() + geom_line(size=1.2) +
