@@ -33,3 +33,5 @@ The most relevant sections in Ramon van Handel's HMM notes are
 * Algorithm 3.2: Baum-Welch Algorithm
 * Algorithm 3.4: Viterbi Algorithm
 * Algorithm 6.1: Concrete EM Algorithm
+
+Ted Test
