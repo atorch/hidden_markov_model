@@ -20,7 +20,13 @@ python src/python/simulation.py --simulation time_varying
 
 ## R Simulations
 
-TODO Put the .R code in its own directory, document here.
+```bash
+export DOCKER_TAG_R=hidden_markov_model_r
+sudo docker build -f ~/hidden_markov_model/Dockerfile-R ~/hidden_markov_model --tag=$DOCKER_TAG_R
+sudo docker run -it -v ~/hidden_markov_model:/home/hidden_markov_model $DOCKER_TAG_R bash
+cd /home/hidden_markov_model/src/
+Rscript simulation_counties.R
+```
 
 # References
 
