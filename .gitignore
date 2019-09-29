@@ -112,3 +112,4 @@ plots/*
 *.png
 *.rds
 *.Rhistory
+#notes_tr.txt#

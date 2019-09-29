@@ -1,0 +1,4 @@
+n_points_per_county,n_counties,n_time_periods,n_components,mu1,defRt1,defRtMid,defRtLast,prY11,prY22
+100,20,3,2,90,4,7,1,9,8
+500,20,3,2,90,4,7,1,9,8
+1000,20,3,2,90,4,7,1,9,8

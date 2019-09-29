@@ -1,3 +1,13 @@
+get_deforestation_prob_from_P <- function(P) {
+    ## Note: this assumes we have 2 hidden states, and state 1 is forest
+    return(P[1, 2])
+}
+get_reforestation_prob_from_P <- function(P) {
+    ## Note: this assumes we have 2 hidden states, and state 1 is forest
+    return(P[2, 1])
+}
+
+
 get_random_initial_parameters <- function(params0) {
 
     ## Given a true set of HMM parameters, return random incorrect parameters from which to begin parameter estimation
@@ -9,7 +19,7 @@ get_random_initial_parameters <- function(params0) {
         ## Probabilities on diagonals of the transition probability matrices
         ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
         ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$P_list?
-        random_uniform <- runif(params0$n_components, min=0.70, max=0.98)
+        random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
 
         P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
         diag(P) <- random_uniform
@@ -20,12 +30,13 @@ get_random_initial_parameters <- function(params0) {
     ## Probabilities on the diagonals of the observation probability matrix pr_y
     ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
     ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$pr_y? 
-    random_uniform <- runif(params0$n_components, min=0.70, max=0.98)
+    random_uniform <- runif(params0$n_components, min=0.6, max=0.98)
     initial_parameters$pr_y <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$pr_y), ncol=ncol(params0$pr_y))
     diag(initial_parameters$pr_y) <- random_uniform
 
-    ## The initial distribution over hidden states is set to its true value
-    initial_parameters$mu <- params0$mu
+    ## TR -- Modify, randomize initial distribution of mu
+    mu1  <- runif(1, min = params0$mu[1]-.05, max = params0$mu+.05)
+    initial_parameters$mu <- c(mu1, 1-mu1) 
 
     return(initial_parameters)
 }
@@ -57,7 +68,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
                            M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
                            M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
                            max_time=max_time,
-                           n_components=n_components,
+                          n_components=n_components,
                            control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
     M_Y_given_S_hat1 <- matrix(solnp_result1$pars[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
     M_S_joint_list_hat1 <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
@@ -171,6 +182,7 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
             return(candidate_D)
         })
     })
+    if(abs(candidate_M_Y_given_S[1,1]-candidate_M_Y_given_S[1,2])<0) message('Close to non diag dom')
     stopifnot(length(candidate_D_list) == length(M_fixed_y_Y_joint_hat_list))  # Careful, lists of lists
     stopifnot(length(candidate_D_list[[1]]) == length(M_fixed_y_Y_joint_hat_list[[1]]))  # Careful with fixed_y
     g1_vectors_for_fixed_y <- lapply(seq_along(candidate_D_list), function(fixed_y) {
@@ -223,7 +235,7 @@ valid_parameters <- function(params) {
     stopifnot("mu" %in% names(params))  # Vector of probabilities for intial distribution
     stopifnot(length(params$mu) == params$n_components)
     stopifnot(all(params$mu >= 0))
-    stopifnot(isTRUE(all.equal(sum(params$mu), 1.0)))  # Careful with float comparisons
+    stopifnot(isTRUE(abs(sum(params$mu)- 1.0)<1e-8))  # TR-- Changed away from Float compairson
     stopifnot(xor("P_list" %in% names(params),  # List of transition matrices for x (one per period)
                   "P" %in% names(params)))  # Time-invariant transition matrix
     stopifnot("pr_y" %in% names(params))  # Observation probabilities conditional on x
