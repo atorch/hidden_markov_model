@@ -11,11 +11,10 @@ set.seed(789)
 
 training_fraction <- 0.50
 stopifnot(0 < training_fraction && training_fraction < 1)
-## landuse_set <- "binary"  # Binary for {crops, pasture}, ternary for {soy, other crops, pasture}
-## stopifnot(landuse_set %in% c("binary", "ternary"))
 
-source("~/Dropbox/amazon_hmm_shared/code/functions_hmm.R")
-source("~/Dropbox/amazon_hmm_shared/code/ggplot_utils.R")
+source("embrapa_validation_landuse_mapping.R")
+source("hmm_functions.R")
+source("ggplot_utils.R")
 set_ggplot_theme()
 
 points <- readRDS("~/Dropbox/amazon_hmm_shared/embrapa_validation/embrapa_validation_points_with_covariates.rds")
@@ -35,14 +34,15 @@ message("all points are in ", state_abbr)
 validation_years <- sort(unique(points$year[!is.na(points$validation_landuse)]))
 message("years with validation land use data: ", paste(validation_years, collapse=", "))
 
-## Short panel: keep only validation years (i.e. drop 2001-2005 and 2011-2016)?  Or keep all years >= 2005?
+## TODO keep only validation years (i.e. drop 2001-2005 and 2011-2016)?  Or keep all years >= 2005?
 ## points <- subset(points, year %in% validation_years)
 points <- subset(points, year >= min(validation_years))  # More precise estimates of transitions in GBM predictions
-message("short panel, keep only ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points")
+message("keeping ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points")
 
 point_id_ever_mata <- unique(points$point_id[!is.na(points$validation_landuse) & tolower(points$validation_landuse) == "mata"])
 point_id_ever_reflorestamento <- unique(points$point_id[!is.na(points$validation_landuse) & tolower(points$validation_landuse) == "reflorestamento"])
 points <- subset(points, !point_id %in% c(point_id_ever_mata, point_id_ever_reflorestamento))  # Down to 403 points
+message("keeping ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points")
 
 point_id_train <- sample(unique(points$point_id), size=floor(training_fraction * length(unique(points$point_id))))
 
@@ -58,75 +58,61 @@ stopifnot(all(mir_vars %in% names(points)))
 stopifnot(all(red_vars %in% names(points)))
 stopifnot(all(blue_vars %in% names(points)))
 
-rf_test_confusion <- list()  # Populate for both binary and ternary case, reference in sweave document
+rf_test_confusion <- list()
 gbm_test_confusion <- list()
 pr_transition <- list()
 pr_transition_predictions <- list()
 hmm_params_hat <- list()
 
+get_initial_hmm_params <- function(landuse_set) {
+    if(landuse_set == "binary") {
+        initial_hmm_params <- list(list(P=rbind(c(0.90, 0.10),
+                                                c(0.10, 0.90)),
+                                        mu=c(0.6, 0.4),
+                                        pr_y=rbind(c(0.80, 0.20),
+                                                   c(0.20, 0.80)),
+                                        n_components=2),
+                                   list(P=rbind(c(0.90, 0.10),
+                                                c(0.30, 0.70)),
+                                        mu=c(0.6, 0.4),
+                                        pr_y=rbind(c(0.90, 0.10),
+                                                   c(0.30, 0.70)),
+                                        n_components=2),
+                                   list(P=rbind(c(0.90, 0.10),
+                                                c(0.40, 0.60)),
+                                        mu=c(0.6, 0.4),
+                                        pr_y=rbind(c(0.90, 0.10),
+                                                   c(0.30, 0.70)),
+                                        n_components=2))
+    } else {
+        initial_hmm_params <- list(list(P=rbind(c(0.80, 0.10, 0.10),
+                                                c(0.10, 0.80, 0.10),
+                                                c(0.10, 0.10, 0.80)),
+                                        mu=c(1/3, 1/3, 1/3),
+                                        pr_y=rbind(c(0.80, 0.10, 0.10),
+                                                   c(0.10, 0.80, 0.10),
+                                                   c(0.10, 0.10, 0.80)),
+                                        n_components=3),
+                                   list(P=rbind(c(.60, 0.20, 0.20),
+                                                c(0.20, 0.60, 0.20),
+                                                c(0.10, 0.10, 0.80)),
+                                        mu=c(0.2, 0.3, 0.5),
+                                        pr_y=rbind(c(0.60, 0.20, 0.20),
+                                                   c(0.20, 0.60, 0.20),
+                                                   c(0.10, 0.10, 0.80)),
+                                        n_components=3))
+    }
+    return(initial_hmm_params)
+}
+
 for(landuse_set in c("binary", "ternary")) {
     message("running validation exercise with ", landuse_set, " land use set S")
     if(landuse_set == "binary") {
-        map_landuse_to_S <- c("?"=NA,
-                              "abertura"="pasture",  # Eduardo: sounds like transitioning area (deforested not yet put into use)
-                              "algodăo"="crops",  # Cotton
-                              "amendoim"="crops",  # Peanut
-                              "arroz"="crops",  # Rice
-                              "crotalária"="crops",  # Eduardo: vegetable
-                              "enleiramento"="crops",  # Eduardo: part of haymaking process
-                              "eucalipto"="crops",  # Eduardo: planted trees, typically used to produce cellulose
-                              "feijao"="crops",  # Beans
-                              "juquira"="pasture",  # Eduardo: bush that appears predominantly in abandoned areas, maybe fallow land
-                              "Mata"=NA,
-                              "milheto"="crops",
-                              "milheto/soja"="crops",
-                              "milho"="crops",
-                              "milho branco"="crops",
-                              "nim"="crops",
-                              "no data"=NA,
-                              "pasto"="pasture",
-                              "pasto (brizantăo)"="pasture",
-                              "pasto degradado"="pasture",
-                              "pasto(b)"="pasture",
-                              "pasto/eucalipto"="pasture",
-                              "pasto+boi"="pasture",
-                              "pipoca"="crops",  # Corn
-                              "pousio"="pasture",  # Eduardo: fallow land, may be either for crops or pasture
-                              "reflorestamento"=NA,  # Reforestation
-                              "soja"="crops",
-                              "soja precoce"="crops")
+        map_landuse_to_S <- map_landuse_to_S_binary
         points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
         stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("crops", "pasture")))
     } else {
-        ## Ternary case: map land uses to soy, non-soy crops, pasture
-        map_landuse_to_S <- c("?"=NA,
-                              "abertura"="pasture",  # Eduardo: sounds like transitioning area (deforested not yet put into use)
-                              "algodăo"="non-soy crops",  # Cotton
-                              "amendoim"="non-soy crops",  # Peanut
-                              "arroz"="non-soy crops",  # Rice
-                              "crotalária"="non-soy crops",  # Eduardo: vegetable
-                              "enleiramento"="non-soy crops",  # Eduardo: part of haymaking process
-                              "eucalipto"="non-soy crops",  # Eduardo: planted trees, typically used to produce cellulose
-                              "feijao"="non-soy crops",  # Beans
-                              "juquira"="pasture",  # Eduardo: bush that appears predominantly in abandoned areas, maybe fallow land
-                              "Mata"=NA,
-                              "milheto"="non-soy crops",
-                              "milheto/soja"="non-soy crops",
-                              "milho"="non-soy crops",
-                              "milho branco"="non-soy crops",
-                              "nim"="non-soy crops",
-                              "no data"=NA,
-                              "pasto"="pasture",
-                              "pasto (brizantăo)"="pasture",
-                              "pasto degradado"="pasture",
-                              "pasto(b)"="pasture",
-                              "pasto/eucalipto"="pasture",
-                              "pasto+boi"="pasture",
-                              "pipoca"="non-soy crops",  # Corn
-                              "pousio"="pasture",  # Eduardo: fallow land, may be either for crops or pasture
-                              "reflorestamento"=NA,  # Reforestation
-                              "soja"="soy",
-                              "soja precoce"="soy")
+        map_landuse_to_S <- map_landuse_to_S_ternary
         points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
         stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("soy", "non-soy crops", "pasture")))
     }
@@ -151,7 +137,8 @@ for(landuse_set in c("binary", "ternary")) {
     table(points_test$landuse_predicted_rf)
     table(points_test$validation_landuse_coarse, points_test$landuse_predicted_rf)  # RF test confusion matrix, compare to OOB
 
-    ## Fit GBM, see whether it beats RF -- takes around 10 minutes to fit -- appears to beat RF for rare landuse in both binary and ternary case
+    ## Fit GBM, see whether it beats RF -- takes around 10 minutes to fit
+    ## GBM appears to beat RF for rare landuse in both binary and ternary case
     gbm_filename <- sprintf("~/Dropbox/amazon_hmm_shared/data/gbm_model_for_embrapa_validation_%s_landuse_set_%s.rds",
                             landuse_set, digest(points_train, algo="crc32"))
     if(file.exists(gbm_filename)) {
@@ -162,15 +149,19 @@ for(landuse_set in c("binary", "ternary")) {
         saveRDS(model_gbm, file=gbm_filename)  # Takes a while to fit -- save and reuse on future runs
     }
     ntrees_star <- gbm.perf(model_gbm, method="cv")  # Plot shows training and CV deviance as function of number of trees -- selects around 5000-6000 trees
+    message("GBM uses ", ntrees_star, " trees (tuning parameter selected by cross-validation)")
+
     gbm_predictions <- predict(model_gbm, type="response", newdata=points_test, ntrees=ntrees_star)  # Outputs class probabilities
     points_test$landuse_predicted_gbm <- colnames(gbm_predictions)[as.integer(apply(gbm_predictions, 1, which.max))]
-    mean(is.na(points_test$landuse_predicted_gbm))  # Zero, unlike RF
+    mean(is.na(points_test$landuse_predicted_gbm))  # Zero (i.e. no missing predictions), unlike RF
     table(points_test$landuse_predicted_gbm)
     table(points_test$validation_landuse_coarse, points_test$landuse_predicted_gbm)  # GBM test confusion matrix, compare to RF
     table(points_test$landuse_predicted_gbm, points_test$landuse_predicted_rf)  # GBM versus RF predictions
 
     rf_test_confusion[[landuse_set]] <- table(points_test$validation_landuse_coarse, points_test$landuse_predicted_rf)
-    gbm_test_confusion[[landuse_set]] <- table(points_test$validation_landuse_coarse, points_test$landuse_predicted_gbm)  # Careful, non-soy crops not diagonally dominant
+
+    ## Careful, not diagonally dominant in ternary case (see non-soy crops entry)
+    gbm_test_confusion[[landuse_set]] <- table(points_test$validation_landuse_coarse, points_test$landuse_predicted_gbm)
 
     ## Use GBM for predicted land use
     points_test$landuse_predicted <- factor(points_test$landuse_predicted_gbm)
@@ -189,43 +180,7 @@ for(landuse_set in c("binary", "ternary")) {
     message("pr_transition: ", paste(round(pr_transition[[landuse_set]], 3), collapse=" "))
     message("pr_transition_predictions: ", paste(round(pr_transition_predictions[[landuse_set]], 3), collapse=" "))
 
-    if(landuse_set == "binary") {
-        list_of_initial_hmm_params <- list(list(P=rbind(c(0.90, 0.10),
-                                                        c(0.10, 0.90)),
-                                                mu=c(0.6, 0.4),
-                                                pr_y=rbind(c(0.80, 0.20),
-                                                           c(0.20, 0.80)),
-                                                n_components=2),
-                                           list(P=rbind(c(0.90, 0.10),
-                                                        c(0.30, 0.70)),
-                                                mu=c(0.6, 0.4),
-                                                pr_y=rbind(c(0.90, 0.10),
-                                                           c(0.30, 0.70)),
-                                                n_components=2),
-                                           list(P=rbind(c(0.90, 0.10),
-                                                        c(0.40, 0.60)),
-                                                mu=c(0.6, 0.4),
-                                                pr_y=rbind(c(0.90, 0.10),
-                                                           c(0.30, 0.70)),
-                                                n_components=2))
-    } else {
-        list_of_initial_hmm_params <- list(list(P=rbind(c(0.80, 0.10, 0.10),
-                                                        c(0.10, 0.80, 0.10),
-                                                        c(0.10, 0.10, 0.80)),
-                                                mu=c(1/3, 1/3, 1/3),
-                                                pr_y=rbind(c(0.80, 0.10, 0.10),
-                                                           c(0.10, 0.80, 0.10),
-                                                           c(0.10, 0.10, 0.80)),
-                                                n_components=3),
-                                           list(P=rbind(c(.60, 0.20, 0.20),
-                                                        c(0.20, 0.60, 0.20),
-                                                        c(0.10, 0.10, 0.80)),
-                                                mu=c(0.2, 0.3, 0.5),
-                                                pr_y=rbind(c(0.60, 0.20, 0.20),
-                                                           c(0.20, 0.60, 0.20),
-                                                           c(0.10, 0.10, 0.80)),
-                                                n_components=3))
-    }
+    list_of_initial_hmm_params <- get_initial_hmm_params(landuse_set)
 
     panel <- get_hmm_panel_from_points(dtable, discrete_y_varname="landuse_predicted")  # List of panel elements
     baum_welch_time_homogeneous(panel[[1]], params=list_of_initial_hmm_params[[1]])  # Test, compare pi to panel[[1]]$y and panel[[1]]$validation_landuse
@@ -235,14 +190,14 @@ for(landuse_set in c("binary", "ternary")) {
     })
 
     hmm_params_hat[[landuse_set]] <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
-    hmm_params_hat[[landuse_set]]$P  # Compre to pr_transition, pr_transition_predictions
+    hmm_params_hat[[landuse_set]]$P  # Compare to pr_transition, pr_transition_predictions
     hmm_params_hat[[landuse_set]]$pr_y  # Compare to with(points_test, prop.table(table(validation_landuse_coarse, landuse_predicted), margin=1))
     message("hmm_params_hat$P: ", paste(round(hmm_params_hat[[landuse_set]]$P, 3), collapse=" "))
 
     ## Run Viterbi and see whether test performance beats raw GBM
-    ## viterbi_paths <- lapply(panel, viterbi_path_time_homogeneous, params=hmm_params_hat)
-    ## dtable$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recursive=TRUE)]
-    ## viterbi_test_confusion <- table(dtable$validation_landuse_coarse, dtable$viterbi_landuse)  # Compare to gbm_test_confusion
+    viterbi_paths <- lapply(panel, viterbi_path_time_homogeneous, params=hmm_params_hat[[landuse_set]])
+    dtable$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recursive=TRUE)]
+    viterbi_test_confusion <- table(dtable$validation_landuse_coarse, dtable$viterbi_landuse)  # Compare to gbm_test_confusion
 
     ## ## Min dist estimation
     ## unique_years <- sort(unique(dtable$year))
@@ -309,7 +264,7 @@ for(landuse_set in c("binary", "ternary")) {
     }
 
     n_boostrap_samples <- 100
-    boots_filename <- sprintf("~/Dropbox/amazon_hmm_shared/embrapa_validation/bootstrap_%s_landuse_set_%s_replications_%s.rds",
+    boots_filename <- sprintf("bootstrap_%s_landuse_set_%s_replications_%s.rds",
                               landuse_set, n_boostrap_samples, digest(points_train, algo="crc32"))
     if(file.exists(boots_filename)) {
         message("loading ", boots_filename)
@@ -350,7 +305,7 @@ for(landuse_set in c("binary", "ternary")) {
               xlab(sprintf("probability of %s to %s transition in bootstrapped test data", landuse, landuse)) +
               ylab("transition probability estimate") +
               facet_wrap(~ label, ncol=2))
-        outfile <- sprintf("~/Dropbox/amazon_hmm_shared/plots/embrapa_validation_%s_bootstrap_%s_transition_hmm_and_gbm_predictions.png",
+        outfile <- sprintf("embrapa_validation_%s_bootstrap_%s_transition_hmm_and_gbm_predictions.png",
                            landuse_set, landuse_underscore, landuse_underscore)
         ggsave(outfile, p, width=10, height=8)
         ## GBM test errors and HMM pr_y
@@ -359,10 +314,10 @@ for(landuse_set in c("binary", "ternary")) {
               xlab(sprintf("error rate for land use predictions in bootstrapped test data, given true land use is %s", landuse)) +
               ylab("HMM estimate of error rate") +
               geom_point())
-        outfile <- sprintf("~/Dropbox/amazon_hmm_shared/plots/embrapa_validation_%s_bootstrap_%s_misclassification_probability.png",
+        outfile <- sprintf("embrapa_validation_%s_bootstrap_%s_misclassification_probability.png",
                            landuse_set, landuse_underscore)
         ggsave(outfile, p, width=10, height=8)
     }
-    outfile <- sprintf("~/Dropbox/amazon_hmm_shared/embrapa_validation/bootstrap_%s_landuse_set_%s_replications.csv", landuse_set, n_boostrap_samples)
+    outfile <- sprintf("bootstrap_%s_landuse_set_%s_replications.csv", landuse_set, n_boostrap_samples)
     write.csv(df_boots, file=outfile, row.names=FALSE)
 }
