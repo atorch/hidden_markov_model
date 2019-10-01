@@ -575,6 +575,9 @@ get_hmm_panel_from_points <- function(points_dt, discrete_y_varname, max_panel_s
         if("validation_landuse" %in% names(points_dt)) {
             panel_element$validation_landuse <- points_dt[J(curr_point_id)]$validation_landuse
         }
+        if("validation_landuse_coarse" %in% names(points_dt)) {
+            panel_element$validation_landuse_coarse <- points_dt[J(curr_point_id)]$validation_landuse_coarse
+        }
         return(panel_element)
     })
     return(panel)
