@@ -157,6 +157,7 @@ run_bootstrap <- function() {
     panel_indices <- seq_along(panel)
     resampled_panel_indices <- sort(sample(panel_indices, size=length(panel), replace=TRUE))  # Sample by point_id
     panel_boot <- panel[resampled_panel_indices]
+
     dtable_boot <- rbindlist(lapply(seq_along(panel_boot), function(panel_boot_index) {
         ## Reconstruct dtable from resampled panel; careful, point_id is no longer a unique identifier, use boot_index instead
         panel_element <- panel_boot[[panel_boot_index]]
@@ -165,6 +166,7 @@ run_bootstrap <- function() {
                    validation_landuse=panel_element$validation_landuse, year=seq(min(dtable$year), max(dtable$year)))
     }))
     setkey(dtable_boot, boot_index, year)
+
     dtable_boot[, predicted_landuse := levels(dtable$landuse_predicted)[y]]
     dtable_boot[, predicted_landuse_next := c(tail(as.character(predicted_landuse), .N-1), as.character(NA)), by="boot_index"]
     dtable_boot[, validation_landuse_coarse_next := c(tail(as.character(validation_landuse_coarse), .N-1), as.character(NA)), by="boot_index"]
@@ -203,7 +205,7 @@ df_boots <- data.frame(replication_index=seq_along(boots),
                                                                                   which(x$hmm_params$landuses == "pasture")]),
                        hmm_pr_y_pasture=sapply(boots, function(x) x$hmm_params$pr_y[which(x$hmm_params$landuses == "pasture"),
                                                                                     which(x$hmm_params$landuses == "crops")]))
-outfile <- sprintf("~/Dropbox/amazon_hmm_shared/embrapa_validation/bootstrap_%s_landuse_set_%s_replications.csv", opt$landuse_set, n_boostrap_samples)
+outfile <- sprintf("bootstrap_%s_landuse_set_%s_replications.csv", opt$landuse_set, n_boostrap_samples)
 write.csv(df_boots, file=outfile, row.names=FALSE)
 
 p <- (ggplot(df_boots, aes(x=pr_pasture_pasture, y=hmm_pr_pasture_pasture)) +
@@ -212,7 +214,7 @@ p <- (ggplot(df_boots, aes(x=pr_pasture_pasture, y=hmm_pr_pasture_pasture)) +
       ylab("HMM transition probability estimate") +
       geom_point())
 p
-ggsave("~/Dropbox/amazon_hmm_shared/plots/embrapa_validation_bootstrap_pasture_transition_hmm.png", p, width=10, height=8)
+ggsave("embrapa_validation_bootstrap_pasture_transition_hmm.png", p, width=10, height=8)
 
 p <- (ggplot(df_boots, aes(x=pr_pasture_pasture, y=predictions_pr_pasture_pasture)) +
       geom_abline(slope=1, intercept=0, linetype=2, color="grey", size=1.2) +
@@ -220,7 +222,7 @@ p <- (ggplot(df_boots, aes(x=pr_pasture_pasture, y=predictions_pr_pasture_pastur
       ylab("transition probability estimate from land use predictions") +
       geom_point())
 p
-ggsave("~/Dropbox/amazon_hmm_shared/plots/embrapa_validation_bootstrap_pasture_transition_predictions.png", p, width=10, height=8)
+ggsave("embrapa_validation_bootstrap_pasture_transition_predictions.png", p, width=10, height=8)
 
 p <- (ggplot(df_boots, aes(x=pr_crops_crops, y=hmm_pr_crops_crops)) +
       geom_abline(slope=1, intercept=0, linetype=2, color="grey", size=1.2) +
@@ -228,7 +230,7 @@ p <- (ggplot(df_boots, aes(x=pr_crops_crops, y=hmm_pr_crops_crops)) +
       ylab("HMM transition probability estimate") +
       geom_point())
 p
-ggsave("~/Dropbox/amazon_hmm_shared/plots/embrapa_validation_bootstrap_crops_transition_hmm.png", p, width=10, height=8)
+ggsave("embrapa_validation_bootstrap_crops_transition_hmm.png", p, width=10, height=8)
 
 p <- (ggplot(df_boots, aes(x=pr_crops_crops, y=predictions_pr_crops_crops)) +
       geom_abline(slope=1, intercept=0, linetype=2, color="grey", size=1.2) +
@@ -236,7 +238,7 @@ p <- (ggplot(df_boots, aes(x=pr_crops_crops, y=predictions_pr_crops_crops)) +
       ylab("transition probability estimate from land use predictions") +
       geom_point())
 p
-ggsave("~/Dropbox/amazon_hmm_shared/plots/embrapa_validation_bootstrap_crops_transition_predictions.png", p, width=10, height=8)
+ggsave("embrapa_validation_bootstrap_crops_transition_predictions.png", p, width=10, height=8)
 
 p <- (ggplot(df_boots, aes(x=test_error_crops, y=hmm_pr_y_crops)) +
       geom_abline(slope=1, intercept=0, linetype=2, color="grey", size=1.2) +
@@ -244,7 +246,7 @@ p <- (ggplot(df_boots, aes(x=test_error_crops, y=hmm_pr_y_crops)) +
       ylab("HMM estimate of error rate") +
       geom_point())
 p
-ggsave("~/Dropbox/amazon_hmm_shared/plots/embrapa_validation_bootstrap_crops_misclassification_probability.png", p, width=10, height=8)
+ggsave("embrapa_validation_bootstrap_crops_misclassification_probability.png", p, width=10, height=8)
 
 p <- (ggplot(df_boots, aes(x=test_error_pasture, y=hmm_pr_y_pasture)) +
       geom_abline(slope=1, intercept=0, linetype=2, color="grey", size=1.2) +
@@ -252,4 +254,4 @@ p <- (ggplot(df_boots, aes(x=test_error_pasture, y=hmm_pr_y_pasture)) +
       ylab("HMM estimate of error rate") +
       geom_point())
 p  # HMM estimate of pasture error appears to be biased downward
-ggsave("~/Dropbox/amazon_hmm_shared/plots/embrapa_validation_bootstrap_pasture_misclassification_probability.png", p, width=10, height=8)
+ggsave("embrapa_validation_bootstrap_pasture_misclassification_probability.png", p, width=10, height=8)
