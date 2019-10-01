@@ -554,3 +554,28 @@ rows_sum_to_one <- function(probability_matrix) {
     ## Useful for checking transition and observation probabilities
     return(isTRUE(all.equal(rowSums(probability_matrix), rep(1, nrow(probability_matrix)))))
 }
+
+get_hmm_panel_from_points <- function(points_dt, discrete_y_varname, max_panel_size=NULL) {
+    ## Given a points_dt data.table, return a panel in format expected by EM estimation function
+    ## If max_panel_size is non-NULL and max_panel_size < length(unique(points_dt$point_id)), return a random sample
+    stopifnot(is.data.table(points_dt))
+    stopifnot("point_id" %in% names(points_dt))
+    stopifnot(discrete_y_varname %in% names(points_dt))
+    if(!is.null(max_panel_size) && max_panel_size < length(unique(points_dt$point_id))) {
+        message("generating panel from points_dt (taking sample of size ", max_panel_size, ")")
+        sample_point_id <- sample(unique(points_dt$point_id), size=max_panel_size)
+    } else {
+        message("generating panel from points_dt (using full sample, keeping order unchanged)")
+        sample_point_id <- unique(points_dt$point_id)
+    }
+    panel <- lapply(sample_point_id, function(curr_point_id) {
+        curr_rows <- points_dt[J(curr_point_id)]
+        discrete_y <- as.integer(curr_rows[[discrete_y_varname]])  # From factor to integer
+        panel_element <- list(point_id=curr_point_id, y=discrete_y)
+        if("validation_landuse" %in% names(points_dt)) {
+            panel_element$validation_landuse <- points_dt[J(curr_point_id)]$validation_landuse
+        }
+        return(panel_element)
+    })
+    return(panel)
+}
