@@ -205,7 +205,7 @@ df_boots <- data.frame(replication_index=seq_along(boots),
                                                                                   which(x$hmm_params$landuses == "pasture")]),
                        hmm_pr_y_pasture=sapply(boots, function(x) x$hmm_params$pr_y[which(x$hmm_params$landuses == "pasture"),
                                                                                     which(x$hmm_params$landuses == "crops")]))
-outfile <- sprintf("bootstrap_%s_landuse_set_%s_replications.csv", opt$landuse_set, n_boostrap_samples)
+outfile <- sprintf("validation_bootstrap_short_panel_%s_landuse_set_%s_replications.csv", opt$landuse_set, n_boostrap_samples)
 write.csv(df_boots, file=outfile, row.names=FALSE)
 
 p <- (ggplot(df_boots, aes(x=pr_pasture_pasture, y=hmm_pr_pasture_pasture)) +
