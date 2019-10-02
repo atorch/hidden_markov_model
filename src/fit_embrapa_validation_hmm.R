@@ -11,11 +11,14 @@ library(sp)
 set.seed(789)
 
 # Binary for {crops, pasture}, ternary for {soy, other crops, pasture}
-opt_list <- list(make_option("--landuse_set", default="binary"))
+opt_list <- list(make_option("--landuse_set", default="binary"),
+                 make_option("--panel_length", default="long"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 stopifnot(opt$landuse_set %in% c("binary", "ternary"))
+stopifnot(opt$panel_length %in% c("long", "short"))
 
+# TODO Should we experiment with a smaller GBM training set and larger HMM validation set?
 training_fraction <- 0.50
 stopifnot(0 < training_fraction && training_fraction < 1)
 
@@ -41,8 +44,14 @@ message("all points are in ", state_abbr)
 validation_years <- sort(unique(points$year[!is.na(points$validation_landuse)]))
 message("years with validation land use data: ", paste(validation_years, collapse=", "))
 
-## TODO keep only validation years (i.e. drop 2001-2005 and 2011-2016)?  Or keep all years >= 2005?
-points <- subset(points, year >= min(validation_years))  # More precise estimates of transitions in GBM predictions than short panel
+if(opt$panel_length == "long") {
+    ## More precise HMM parameter estimates than short panel
+    points <- subset(points, year >= min(validation_years))
+    
+} else {
+    points <- subset(points, year %in% validation_years)
+}
+message("keeping the following years: ", paste(unique(points$year), collapse=", "))
 message("keeping ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points")
 
 point_id_ever_mata <- unique(points$point_id[!is.na(points$validation_landuse) & tolower(points$validation_landuse) == "mata"])
