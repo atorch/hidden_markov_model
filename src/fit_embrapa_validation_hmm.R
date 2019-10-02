@@ -244,8 +244,8 @@ run_bootstrap <- function() {
 }
 
 n_boostrap_samples <- 100
-boots_filename <- sprintf("bootstrap_%s_landuse_set_%s_replications_%s.rds",
-                          opt$landuse_set, n_boostrap_samples, digest(points_train, algo="crc32"))
+boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications_%s.rds",
+                          opt$panel_length, opt$landuse_set, n_boostrap_samples, digest(points_train, algo="crc32"))
 if(file.exists(boots_filename)) {
     message("loading ", boots_filename)
     boots <- readRDS(boots_filename)
@@ -285,8 +285,8 @@ for(landuse in landuses) {
           xlab(sprintf("probability of %s to %s transition in bootstrapped test data", landuse, landuse)) +
           ylab("transition probability estimate") +
           facet_wrap(~ label, ncol=2))
-    outfile <- sprintf("validation_long_panel_%s_bootstrap_%s_transition_hmm_and_gbm_predictions.png",
-                       opt$landuse_set, landuse_underscore, landuse_underscore)
+    outfile <- sprintf("validation_%s_panel_%s_bootstrap_%s_transition_hmm_and_gbm_predictions.png",
+                       opt$panel_length, opt$landuse_set, landuse_underscore, landuse_underscore)
     ggsave(outfile, p, width=10, height=8)
     ## GBM test errors and HMM pr_y
     p <- (ggplot(df_boots, aes_string(x=test_error, y=hmm_error)) +
@@ -294,9 +294,11 @@ for(landuse in landuses) {
           xlab(sprintf("error rate for land use predictions in bootstrapped test data, given true land use is %s", landuse)) +
           ylab("HMM estimate of error rate") +
           geom_point())
-    outfile <- sprintf("validation_long_panel_%s_bootstrap_%s_misclassification_probability.png",
-                       opt$landuse_set, landuse_underscore)
+    outfile <- sprintf("validation_%s_panel_%s_bootstrap_%s_misclassification_probability.png",
+                       opt$panel_length, opt$landuse_set, landuse_underscore)
     ggsave(outfile, p, width=10, height=8)
 }
-outfile <- sprintf("validation_bootstrap_long_panel_%s_landuse_set_%s_replications.csv", opt$landuse_set, n_boostrap_samples)
+outfile <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications.csv",
+                   opt$panel_length, opt$landuse_set, n_boostrap_samples)
+message("saving ", outfile)
 write.csv(df_boots, file=outfile, row.names=FALSE)
