@@ -5,33 +5,33 @@ library(parallel)
 source("hmm_functions.R")
 
 
-## '2019-09-24 19:24:42'
-## simulation_df <- data.frame(n_points_per_county=c(100, 500, 1000, rep(1000,8)),
-##                             n_counties=c(50, 50, 50, rep(50,8)),
-##                             n_time_periods=c(4, 4, 4 , rep(4, 8)),
-##                             n_components = c(2, 2, 2, rep(2, 8)),
-##                             mu1 = c(90, 90, 90, rep(90,8)), ##Put in as percent
-##                             defRt1 = c(4, 4, 4, rep(4,8)), ##In as percent
-##                             defRtMid = c(10, 10, 10, rep(10,8)), ##same
-##                             defRtLast = c(20, 20, 20, seq(5,40,by=5)),
-##                             prY11 = c(90, 90, 90,rep(90,8)), ##Correct classification Probability 1,1 in matrix
-##                             prY22 = c(80, 80, 80, rep(80,8))) ##Correct classification Probability 2,2 in matrix
 
-simulation_df <- data.frame(n_points_per_county=c( rep(1000,6)),
-                            n_counties=c(rep(50,6)),
-                            n_time_periods=c(5, 6, rep(4,4)),
-                            n_components = c(rep(2,6)),
-                            mu1 = c(rep(90,6)), ##Put in as percent
-                            defRt1 = c(rep(4,6)), ##In as percent
-                            defRtMid = c(rep(10,6)), ##same
-                            defRtLast = c(rep(20,6)),
-                            prY11 = c(rep(90,2),75,80,85,95), ##Misclassification Probability 1,1 in matrix
-                            prY22 = c(rep(80,6))) ##Misclassification Probability 2,2 in matrix
+simulation_df <- data.frame(n_points_per_county=c(100, 500, 1000, rep(1000,8)),
+                            n_counties=c(100, 100, 100, rep(100,8)),
+                            n_time_periods=c(4, 4, 4 , rep(4, 8)),
+                            n_components = c(2, 2, 2, rep(2, 8)),
+                            mu1 = c(90, 90, 90, rep(90,8)), ##Put in as percent
+                            defRt1 = c(4, 4, 4, rep(4,8)), ##In as percent
+                            defRtMid = c(10, 10, 10, rep(10,8)), ##same
+                            defRtLast = c(20, 20, 20, seq(5,40,by=5)),
+                            prY11 = c(90, 90, 90,rep(90,8)), ##Correct classification Probability 1,1 in matrix
+                            prY22 = c(80, 80, 80, rep(80,8))) ##Correct classification Probability 2,2 in matrix
+
+
+## simulation_df <- data.frame(n_points_per_county=c( rep(1000,6)),
+##                             n_counties=c(rep(50,6)),
+##                             n_time_periods=c(5, 6, rep(4,4)),
+##                             n_components = c(rep(2,6)),
+##                             mu1 = c(rep(90,6)), ##Put in as percent
+##                             defRt1 = c(rep(4,6)), ##In as percent
+##                             defRtMid = c(rep(10,6)), ##same
+##                             defRtLast = c(rep(20,6)),
+##                             prY11 = c(rep(90,2),75,80,85,95), ##Misclassification Probability 1,1 in matrix
+##                             prY22 = c(rep(80,6))) ##Misclassification Probability 2,2 in matrix
 
 
 max_cores <- 4
 set.seed(998877)
-
 
 ##Generate matrix of simulation values (constant across all simulations)
 maxNCount  <- max(simulation_df$n_counties)
@@ -101,6 +101,7 @@ simulate_single_county <- function(county_id, n_time_periods, n_points_per_count
 
     ## Observation probabilities (rows are hidden states, columns are Y)
     ## Note: for now, every county has the same misclassification probabilities
+    ## Note that this is the transpose of upsilon in the paper.
     pr_y <- rbind(c(prY11, 1-prY11),
                   c(1-prY22, prY22))
 
@@ -167,11 +168,16 @@ for (i in seq_len(nrow(simulation_df))) {
                              "valid_panel_element",
                              "valid_parameters"))
 
-
-    counties <- parLapply(cluster, seq_len(n_counties), function(n) {
+    counties <- lapply(seq_len(n_counties), function(n) {
         simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county,
                                n_components = n_components,mu1 = mu1, prY11 = prY11, prY22 = prY22,
                                county_fixed_effect = feVec[n], county_X = xVec)
+
+    
+    ## counties <- parLapply(cluster, seq_len(n_counties), function(n) {
+    ##     simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county,
+    ##                            n_components = n_components,mu1 = mu1, prY11 = prY11, prY22 = prY22,
+    ##                            county_fixed_effect = feVec[n], county_X = xVec)
     })
 
     ## ##Debug

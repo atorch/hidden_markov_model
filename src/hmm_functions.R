@@ -75,12 +75,14 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
         return(matrix(solnp_result1$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
 
+    
     ## Note: we keep track of the objective function values so that we can pick the best MD estimate (lowest objfn_values)
     min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat1),
                                 P_list=lapply(M_S_joint_list_hat1, get_transition_probs_from_M_S_joint),
+                                mu = M_S_joint_list_hat1[[1]][1,1] +  M_S_joint_list_hat1[[1]][2,1],
                                 convergence=solnp_result1$convergence,
                                 objfn_values=solnp_result1$values)
-
+    
     return(min_dist_params_hat)
 
 }

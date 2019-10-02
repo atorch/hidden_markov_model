@@ -105,78 +105,94 @@ county_df_melt[variable %like% '_naive', estimTypDisp := 'Naive']
 plt <- ggplot(county_df_melt[ n_time_periods == 4 & prY11 == 90 & defRtLast == 20 & variable %like% 'deforestation_probability'], aes( y=value, x = estimTypDisp, group=variable)) +
     geom_boxplot() +
     geom_hline(aes(yintercept=true_deforestation_probability),linetype = 'dashed')+
-    ggtitle('Deforestation Probabilities') +
-    scale_y_continuous('Estimated Deforestation Probability',limits = c(0,.5))+
+    scale_y_continuous('Estimated Transition Probability',limits = c(0,.5))+
     scale_x_discrete('Estimator') +
     facet_grid(paste0('P[list(',time,',',time+1,')]')~n_points_per_county_disp,labeller = label_parsed)+
     theme_bw()
-ggsave('deforestation_probability_different_sample_size.png',width = 8,height=5,units='in')
+ggsave('deforestation_probability_different_sample_size.png',width = 6,height=3,units='in')
 
 plt <- ggplot(county_df_melt[ n_points_per_county == 1000 & prY11 == 90 & defRtLast == 20 & variable %like% 'deforestation_probability'], aes( y=value, x = estimTypDisp, group=variable)) +
     geom_boxplot() +
     geom_hline(aes(yintercept=true_deforestation_probability),linetype = 'dashed')+
-    ggtitle('Deforestation Probabilities') +
-    scale_y_continuous('Estimated Deforestation Probability',limits = c(0,.5))+
+    scale_y_continuous('Estimated Transition Probability',limits = c(0,.5))+
     scale_x_discrete('Estimator') +
     facet_grid(paste0('P[list(',time,',',time+1,')]')~paste0("'N Periods='~",n_time_periods),labeller = label_parsed)+
     theme_bw()
-ggsave('deforestation_probability_different_nPeriods.png',width = 8,height=5,units='in')
+ggsave('deforestation_probability_different_nPeriods.png',width = 6,height = 4,units='in')
 
 
 plt <- ggplot(county_df_melt[prY11 == 90 &  n_time_periods == 4 & defRtLast == 20 & time == 1 & variable %like% 'misclassification_probability_1'], aes( y=value, x = estimTypDisp, group=variable)) +
     geom_boxplot() +
     geom_hline(aes(yintercept=true_misclassification_probability_1), linetype = 'dashed')+
-    ggtitle('Misclassification Probabilities') +
     scale_x_discrete('Estimator', labels = function(x) str_replace_all(x,'estimated_misclassification_probability_1_','')) +
     scale_y_continuous('Estimated Misclassification Probability')+
     facet_wrap(~n_points_per_county_disp,labeller = label_parsed)+
     theme_bw()
-ggsave('misclassification_probability_different_sample_size.png',width = 8,height=5,units='in')
+ggsave('misclassification_probability_different_sample_size.png',width = 6,height = 4,units='in')
 
 plt <- ggplot(county_df_melt[prY11 == 90 &  n_points_per_county == 1000 & defRtLast == 20 & time == 1 & variable %like% 'misclassification_probability_1'], aes( y=value, x = estimTypDisp, group=variable)) +
     geom_boxplot() +
     geom_hline(aes(yintercept=true_misclassification_probability_1), linetype = 'dashed')+
-    ggtitle('Misclassification Probabilities') +
     scale_x_discrete('Estimator', labels = function(x) str_replace_all(x,'estimated_misclassification_probability_1_','')) +
     scale_y_continuous('Estimated Misclassification Probability')+
     facet_wrap(~paste0(n_time_periods,' Periods'))+
     theme_bw()
-ggsave('misclassification_probability_different_nPeriods.png',width = 8,height=5,units='in')
+ggsave('misclassification_probability_different_nPeriods.png',width = 6,height = 4,units='in')
 
 plt <- ggplot(county_df_melt[n_time_periods == 4 &  n_points_per_county == 1000 & defRtLast == 20 & time == 1 & variable %like% 'misclassification_probability_1'], aes( y=value, x = estimTypDisp, group=variable)) +
     geom_boxplot() +
     geom_hline(aes(yintercept=true_misclassification_probability_1), linetype = 'dashed')+
-    ggtitle('Misclassification Probabilities') +
     scale_x_discrete('Estimator', labels = function(x) str_replace_all(x,'estimated_misclassification_probability_1_','')) +
     scale_y_continuous('Estimated Misclassification Probability')+
     facet_wrap(~paste0('Y[list(1,1)]==',(1-as.integer(prY11)/100)),labeller = label_parsed)+
     theme_bw()
-ggsave('misclassification_probability_different_PrY11.png',width = 8,height=5,units='in')
+ggsave('misclassification_probability_different_PrY11.png',width = 6,height = 4,units='in')
 
 
 plt <- ggplot(county_df_melt[ prY11 == 90 & time == 3 & n_time_periods == 4 & n_points_per_county == 1000 & variable %like% 'misclassification_probability_1'], aes(x=true_deforestation_probability, y=value, color = estimTypDisp,fill=estimTypDisp)) +
     geom_smooth() +
     geom_hline(aes(yintercept=true_misclassification_probability_1),linetype = 'dashed')+
-    ggtitle('Misclassification Probabilities as Deforestation Rates Change') +
     scale_color_viridis('Estimator',discrete = TRUE, labels = function(x) str_replace_all(x,'estimated_misclassification_probability_1_','')) +
     scale_fill_viridis('Estimator',discrete = TRUE, labels = function(x) str_replace_all(x,'estimated_misclassification_probability_1_','')) +
-    scale_x_continuous(bquote("True Deforestation Probability("~ P[list(3,4)]~")"))+
-    scale_y_continuous('Estimated Misclassification Probability')+
+    scale_x_continuous(bquote("True Transition Probability("~ P[list(3,4)]~")"))+
+    scale_y_continuous('Estimated Misclassification Probability',limits = c(0,.3))+
     theme_bw()
-ggsave('misclassification_probability_different_deforestation_rate.png', width = 8, height = 5)
+ggsave('misclassification_probability_different_deforestation_rate.png', width = 6, height = 4,units = 'in')
 
 
 plt <- ggplot(county_df_melt[ prY11 == 90 &  n_points_per_county == 1000 & n_time_periods == 4 & variable %like% 'deforestation'], aes(x=defRtLast/100, y=value, color = estimTypDisp,fill=estimTypDisp)) +
     geom_smooth() +
     geom_line(aes(y=true_deforestation_probability),linetype='dashed',color='black')+
-    ggtitle('Deforestation Probability Estimator Accuracy') +
     scale_color_viridis('Estimator',discrete = TRUE, labels = function(x) str_replace_all(x,'estimated_deforestation_probability_','')) +
     scale_fill_viridis('Estimator',discrete = TRUE, labels = function(x) str_replace_all(x,'estimated_deforestation_probability_','')) +
-    scale_x_continuous(bquote("True Deforestation Probability("~ P[list(3,4)]~")"))+
-    scale_y_continuous(bquote("Estimated Deforestation Probability("~ P[list(3,4)]~")"))+
+    scale_x_continuous(bquote("True Transition Probability("~ P[list(3,4)]~")"))+
+    scale_y_continuous(bquote("Estimated Transition Probability"),limits = c(0,.4))+
     facet_wrap(~paste0('P[list(',time,',',time+1,')]'),label = label_parsed)+
     theme_bw()
-ggsave('deforestation_probability_different_deforestation_rate.png', width = 8, height = 5)
+ggsave('deforestation_probability_different_deforestation_rate.png', width = 6, height = 4,units = 'in')
+
+plt <- ggplot(county_df_melt[ defRtLast==20 & time == 3 & n_time_periods == 4 & n_points_per_county == 1000 & variable %like% 'misclassification_probability_1'], aes(x=true_misclassification_probability_1, y=value, color = estimTypDisp,fill=estimTypDisp)) +
+    geom_smooth() +
+    geom_line(aes(y=true_misclassification_probability_1),linetype = 'dashed',color='black')+
+    scale_color_viridis('Estimator',discrete = TRUE, labels = function(x) str_replace_all(x,'estimated_misclassification_probability_1_','')) +
+    scale_fill_viridis('Estimator',discrete = TRUE, labels = function(x) str_replace_all(x,'estimated_misclassification_probability_1_','')) +
+      scale_x_continuous(bquote("True Misclassification Probability("~ Upsilon(1,1)~")"))+
+    scale_y_continuous('Estimated Misclassification Probability',limits = c(0,.4))+
+    theme_bw()
+ggsave('misclassification_probability_different_misclassification_rate.png', width = 6, height = 4,units = 'in')
+
+
+plt <- ggplot(county_df_melt[ defRtLast==20& n_points_per_county == 1000 & n_time_periods == 4 & variable %like% 'deforestation'], aes(x=true_misclassification_probability_1, y=value, color = estimTypDisp,fill=estimTypDisp)) +
+    geom_smooth() +
+    geom_line(aes(y=true_deforestation_probability),linetype='dashed',color='black')+
+    scale_color_viridis('Estimator',discrete = TRUE, labels = function(x) str_replace_all(x,'estimated_deforestation_probability_','')) +
+    scale_fill_viridis('Estimator',discrete = TRUE, labels = function(x) str_replace_all(x,'estimated_deforestation_probability_','')) +
+    scale_x_continuous(bquote("True Misclassification Probability("~ Upsilon(1,1)~")"))+
+    scale_y_continuous("Estimated Transition Probability",limits = c(0,.4))+
+    facet_wrap(~paste0('P[list(',time,',',time+1,')]'),label = label_parsed)+
+    theme_bw()
+ggsave('deforestation_probability_different_misclassification_rate.png', width = 6, height = 4, units = 'in')
+
 
 mseFunc <- function(trueVal,keyword){
     prDat <- county_df_melt[ variable %like% keyword, list(rmse = sqrt(mean((value - get(trueVal))^2)),
@@ -187,6 +203,12 @@ mseFunc <- function(trueVal,keyword){
     return(prDat)
 }
 
+
+colsT <- iterDat[n_points_per_county %in% nVec & n_counties == 50  & mu1==90 & defRt1==4&defRtMid==10 & defRtLast==20 & prY11==90 & prY22==80 & n_points_per_county == 1000]
+colsMrgT <- cols[,list(simID,fileID,nPts = n_points_per_county)]
+
+defForestPrDatT <- merge(mseFunc('true_deforestation_probability','deforestation_probability'),colsMrgT)
+miscPr1DatT <- merge(mseFunc('true_misclassification_probability_1','misclassification_probability_1'),colsMrgT)
 
 nVec <- c(100,500,1000)
 cols <- iterDat[n_points_per_county %in% nVec & n_counties == 50 & n_time_periods==4 & mu1==90 & defRt1==4&defRtMid==10 & defRtLast==20 & prY11==90 & prY22==80]
@@ -215,7 +237,7 @@ outFunc <- function(dat,nPtVar,varTyp,errTyp,ti=1){
 ##Make output table 
 matVec <- c('muPrDat','miscPr1Dat','miscPr2Dat',rep(c('defForestPrDat','reForestPrDat'),3))
 tVec <- c(1,1,1,1,1,2,2,3,3)
-nmVec <- c('\\mu=.9','\\Upsilon(1,2)=.1','\\Upsilon(2,1)=.2','P_{1,2}(1,2)=.04','P_{1,2}(2,1)=.02','P_{2,3}(1,2)=.1','P_{2,3}(2,1)=.02','P_{3,4}(1,2)=.2','P_{3,4}(2,1)=.02')
+nmVec <- c('P_{S_{1}}=.9','\\Upsilon(2,1)=.1','\\Upsilon(1,2)=.2','P_{1}(1,2)=.04','P_{1}(2,1)=.02','P_{2}(1,2)=.1','P_{2}(2,1)=.02','P_{3}(1,2)=.2','P_{3}(2,1)=.02')
 
 sink('mcTable.tex')
 cat('\\begin{tabular}{rr@{\\hskip .3in}ccc@{\\hskip .4in}ccc@{\\hskip .4in}ccc}\n')
