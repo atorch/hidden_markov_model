@@ -35,8 +35,7 @@ validation_years <- sort(unique(points$year[!is.na(points$validation_landuse)]))
 message("years with validation land use data: ", paste(validation_years, collapse=", "))
 
 ## TODO keep only validation years (i.e. drop 2001-2005 and 2011-2016)?  Or keep all years >= 2005?
-## points <- subset(points, year %in% validation_years)
-points <- subset(points, year >= min(validation_years))  # More precise estimates of transitions in GBM predictions
+points <- subset(points, year >= min(validation_years))  # More precise estimates of transitions in GBM predictions than short panel
 message("keeping ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points")
 
 point_id_ever_mata <- unique(points$point_id[!is.na(points$validation_landuse) & tolower(points$validation_landuse) == "mata"])
@@ -318,6 +317,6 @@ for(landuse_set in c("binary", "ternary")) {
                            landuse_set, landuse_underscore)
         ggsave(outfile, p, width=10, height=8)
     }
-    outfile <- sprintf("bootstrap_%s_landuse_set_%s_replications.csv", landuse_set, n_boostrap_samples)
+    outfile <- sprintf("validation_bootstrap_long_panel_%s_landuse_set_%s_replications.csv", landuse_set, n_boostrap_samples)
     write.csv(df_boots, file=outfile, row.names=FALSE)
 }
