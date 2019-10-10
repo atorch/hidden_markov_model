@@ -48,13 +48,19 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
     n_components <- initial_params$n_components
 
-    nloptr_opts <- list(algorithm="NLOPT_GN_ISRES",
-                        xtol_rel=1.0e-3,
-                        ftol_rel=1.0e-3,
-                        xtol_abs=1.0e-3,
-                        ftol_abs=1.0e-3,
-                        maxeval=100000,
-                        print_level=2)
+    nloptr_local_opts <- list("algorithm"="NLOPT_GN_DIRECT",
+                              "xtol_rel"=0.001,
+                              "ftol_rel"=0.001,
+                              "ftol_abs"=0.001,
+                              "xtol_abs"=0.001)
+    nloptr_opts <- list("algorithm"="NLOPT_LN_AUGLAG",
+                        "xtol_rel"=0.001,
+                        "ftol_rel"=0.001,
+                        "ftol_abs"=0.001,
+                        "xtol_abs"=0.001,
+                        "maxeval"=10,
+                        "local_opts"=nloptr_local_opts,
+                        "print_level"=2)
 
     nloptr_result <- nloptr(x0=x_guess,
                             eval_f=objfn_minimum_distance,
@@ -84,7 +90,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
                           M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
                           max_time=max_time,
                           n_components=n_components,
-                          control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
+                          control=list(delta=1e-9, tol=1e-13, trace=1, rho=0.1))  # Careful, sensitive to control
 
     M_Y_given_S_hat_solnp <- matrix(solnp_result$pars[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
     M_S_joint_list_hat_solnp <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
@@ -102,7 +108,9 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
                                 nloptr_message=nloptr_result$message,
                                 nloptr_iterations=nloptr_result$iterations,
                                 nloptr_objective=nloptr_result$objective,
-                                nloptr_status=nloptr_result$status)
+                                nloptr_status=nloptr_result$status,
+                                x_guess=x_guess,
+                                nloptr_solution=nloptr_result$solution)
 
     return(min_dist_params_hat)
 

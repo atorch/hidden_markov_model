@@ -36,7 +36,6 @@ stopifnot(all(diff(params0_hat$loglik) > 0))  # Loglik should be increasing
 max(abs(c(params0_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
 max(abs(params0_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
 
-
 ## Initialize EM at incorrect parameter values (more difficult)
 params1_hat <- get_expectation_minimization_estimates(panel, params1, max_iter=20, epsilon=0.001)
 
@@ -135,7 +134,7 @@ M_S_joint_incorrect <- lapply(seq_along(params1$P_list), function(time_index) {
 min_dist_params1_hat <- get_min_distance_estimates(params1, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 
 ## Minimum distance estimation starting from correct parameters
-Min_dist_params0_hat <- get_min_distance_estimates(params0, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
+min_dist_params0_hat <- get_min_distance_estimates(params0, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 
 ## Essentially zero: we get the same min dist results starting from either params0 or params1
 max(abs(min_dist_params0_hat$pr_y - min_dist_params1_hat$pr_y))
@@ -145,6 +144,7 @@ max(abs(c(min_dist_params0_hat$P_list, recursive=TRUE) - c(min_dist_params1_hat$
 max(abs(params0$pr_y - min_dist_params1_hat$pr_y))
 max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list, recursive=TRUE)))
 
+## Compare MD estimates using nloptr to true parameters -- careful, nloptr is just returning the initial x_guess!
 max(abs(params0$pr_y - min_dist_params1_hat$pr_y_nloptr))
 max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list_nloptr, recursive=TRUE)))
 
@@ -180,3 +180,9 @@ min_dist_params1_hat_population$objfn_values
 ## Try again with population, now starting the optimization from params2 ("more incorrect" than params1)
 ## Note convergence code of 2 and "Solution not reliable....Problem Inverting Hessian" warning
 min_dist_params2_hat_population <- get_min_distance_estimates(params2, M_Y_joint_hat_population, M_Y_joint_hat_inverse_population, M_fixed_y_Y_joint_hat_population, dtable)
+
+## Optimizer should get the distance (objective function) down to zero, but doesn't when starting from params2
+min_dist_params2_hat_population$objfn_values
+
+## This distance should be zero, but isn't when beginning optimization from params2
+max(abs(c(min_dist_params2_hat_population$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))
