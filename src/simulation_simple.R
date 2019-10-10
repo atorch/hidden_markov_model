@@ -146,48 +146,12 @@ M_S_joint_list_incorrect <- lapply(seq_along(params1$P_list), function(time_inde
 })
 
 x_guess1 <- c(t(params1$pr_y), c(M_S_joint_list_incorrect, recursive=TRUE))  # Incorrect HMM parameters as initial guess
-max_time <- max(dtable$time)
-solnp_result1 <- solnp(x_guess1,
-                       fun=objfn_minimum_distance, eqfun=eq_function_minimum_distance,
-                       eqB=rep(1, params0$n_components + max(dtable$time) - 1),
-                       LB=rep(0, length(x_guess1)),
-                       UB=rep(1, length(x_guess1)),
-                       M_Y_joint_hat_list=M_Y_joint_hat_list,
-                       M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
-                       M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
-                       max_time=max_time,
-                       n_components=params0$n_components,
-                       control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
-M_Y_given_S_hat1 <- matrix(solnp_result1$pars[seq(1, params0$n_components^2)], params0$n_components, params0$n_components)  # Transpose of params0$pr_y
-M_S_joint_list_hat1 <- lapply(seq_len(max_time - 1), function(time_index, n_components=params1$n_components) {
-    return(matrix(solnp_result1$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
-})
-min_dist_params1_hat <- list(pr_y=t(M_Y_given_S_hat1),
-                             P_list=lapply(M_S_joint_list_hat1, get_transition_probs_from_M_S_joint),
-                             convergence=solnp_result1$convergence,
-                             objfn_values=solnp_result1$values)
+
+## Minimum distance estimation starting from incorrect parameters
+min_dist_params1_hat <- get_min_distance_estimates(params1, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 
 ## Minimum distance estimation starting from correct parameters
-x_guess0 <- c(t(params0$pr_y), c(M_S_joint_list_population, recursive=TRUE))
-solnp_result0 <- solnp(x_guess0,
-                       fun=objfn_minimum_distance, eqfun=eq_function_minimum_distance,
-                       eqB=rep(1, params0$n_components + max(dtable$time) - 1),
-                       LB=rep(0, length(x_guess1)),
-                       UB=rep(1, length(x_guess1)),
-                       M_Y_joint_hat_list=M_Y_joint_hat_list,
-                       M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
-                       M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
-                       max_time=max_time,
-                       n_components=params0$n_components,
-                       control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
-M_Y_given_S_hat0 <- matrix(solnp_result0$pars[seq(1, params0$n_components^2)], params0$n_components, params0$n_components)  # Transpose of params0$pr_y
-M_S_joint_list_hat0 <- lapply(seq_len(max_time - 1), function(time_index, n_components=params0$n_components) {
-    return(matrix(solnp_result0$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
-})
-min_dist_params0_hat <- list(pr_y=t(M_Y_given_S_hat0),
-                             P_list=lapply(M_S_joint_list_hat0, get_transition_probs_from_M_S_joint),
-                             convergence=solnp_result0$convergence,
-                             objfn_values=solnp_result0$values)
+min_dist_params0_hat <- get_min_distance_estimates(params0, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 
 ## Essentially zero: we get the same min dist results starting from either params0 or params1
 max(abs(M_Y_given_S_hat0 - M_Y_given_S_hat1))
@@ -206,6 +170,7 @@ M_fixed_y_Y_joint_hat_list_population <- lapply(seq_len(params0$n_components), f
         return(t(params0$pr_y) %*% D %*% solve(t(params0$pr_y)) %*% M_Y_joint_hat_list_population[[fixed_t]])  # Compare to sample analogue M_fixed_y_Y_joint_hat_list
     })
 })
+
 ## Use population values for the objective function, with incorrect starting values for optimization
 ## Despite the incorrect starting values, the estimation should recover the true parameters without error
 ## The optimizer should be able to get the objective function down to zero

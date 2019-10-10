@@ -112,3 +112,5 @@ plots/*
 *.png
 *.rds
 *.Rhistory
+
+Rplots.pdf

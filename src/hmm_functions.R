@@ -110,12 +110,13 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     ## Compute inverses once and pass them to get_min_distance_estimates / solnp
     M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
 
+    ## TODO Need to handle edge case where any of these matrices are not invertible, which might happen at small sample sizes
     M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
         lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
             return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
                         table(y_one_period_ahead, y)) / sum(dtable$time == fixed_t))
         })
-    })  # TODO Need to handle edge case where any of these matrices are not invertible, might happen at small sample sizes
+    })
 
     min_dist_params_hat_list <- lapply(random_initial_parameters,
                                        get_min_distance_estimates,
@@ -196,16 +197,23 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
     return(as.vector(t(g) %*% W_matrix %*% g))
 }
 
-eq_function_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_list,
-                                         M_fixed_y_Y_joint_hat_list, max_time, n_components, W_matrix=NULL) {
+eq_function_minimum_distance <- function(x,
+                                         M_Y_joint_hat_inverse_list,
+                                         M_Y_joint_hat_list,
+                                         M_fixed_y_Y_joint_hat_list,
+                                         max_time,
+                                         n_components,
+                                         W_matrix=NULL) {
     ## Constraint function for minimum distance estimation (constraint is eq_function(x) = 1 everywhere)
     ## "The main and constraint functions must take the exact same arguments, irrespective of whether they are used"
     stopifnot(is.vector(x))
     stopifnot(length(x) == max_time*n_components^2)
+
     candidate_M_Y_given_S <- matrix(x[seq(1, n_components^2)], n_components, n_components)
     candidate_M_S_joint_list <- lapply(seq_len(max_time - 1), function(time_index) {
         return(matrix(x[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
+
     return(c(colSums(candidate_M_Y_given_S), sapply(candidate_M_S_joint_list, sum)))
 }
 
