@@ -43,32 +43,67 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
         return(t(initial_params$P_list[[time_index]] * matrix(mu_t, length(mu_t), length(mu_t))))
     })
 
-    x_guess1 <- c(t(initial_params$pr_y), c(M_S_joint_list_initial, recursive=TRUE))
+    x_guess <- c(t(initial_params$pr_y), c(M_S_joint_list_initial, recursive=TRUE))
     max_time <- max(dtable$time)
 
     n_components <- initial_params$n_components
 
-    solnp_result1 <- solnp(x_guess1,
-                           fun=objfn_minimum_distance, eqfun=eq_function_minimum_distance,
-                           eqB=rep(1, n_components + max(dtable$time) - 1),
-                           LB=rep(0, length(x_guess1)),
-                           UB=rep(1, length(x_guess1)),
-                           M_Y_joint_hat_list=M_Y_joint_hat_list,
-                           M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
-                           M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
-                           max_time=max_time,
-                           n_components=n_components,
-                           control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
-    M_Y_given_S_hat1 <- matrix(solnp_result1$pars[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
-    M_S_joint_list_hat1 <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
-        return(matrix(solnp_result1$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
+    ## The algorithm NLOPT_LN_AUGLAG_EQ needs a local optimizer; specify an algorithm and termination condition in local_opts
+    nloptr_local_opts <- list(algorithm="NLOPT_LN_COBYLA",
+                              xtol_rel=1.0e-5,
+                              maxeval=100000)
+    nloptr_opts <- list(algorithm="NLOPT_LN_AUGLAG_EQ",
+                        local_opts=nloptr_local_opts,
+                        xtol_rel=1.0e-5,
+                        maxeval=100000,
+                        print_level=0)
+
+    nloptr_result <- nloptr(x0=x_guess,
+                            eval_f=objfn_minimum_distance,
+                            lb=rep(0, length(x_guess)),
+                            ub=rep(1, length(x_guess)),
+                            eval_g_eq=eq_function_minimum_distance,
+                            M_Y_joint_hat_list=M_Y_joint_hat_list,
+                            M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
+                            M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
+                            max_time=max_time,
+                            n_components=n_components,
+                            opts=nloptr_opts)
+
+    M_Y_given_S_hat_nloptr <- matrix(nloptr_result$solution[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
+    M_S_joint_list_hat_nloptr <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
+        return(matrix(nloptr_result$solution[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
+    })
+
+    solnp_result <- solnp(x_guess,
+                          fun=objfn_minimum_distance,
+                          eqfun=eq_function_minimum_distance,
+                          eqB=rep(0, n_components + max(dtable$time) - 1),
+                          LB=rep(0, length(x_guess)),
+                          UB=rep(1, length(x_guess)),
+                          M_Y_joint_hat_list=M_Y_joint_hat_list,
+                          M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
+                          M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
+                          max_time=max_time,
+                          n_components=n_components,
+                          control=list(delta=1e-14, tol=1e-14, trace=1))  # Careful, sensitive to control
+
+    M_Y_given_S_hat_solnp <- matrix(solnp_result$pars[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
+    M_S_joint_list_hat_solnp <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
+        return(matrix(solnp_result$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
 
     ## Note: we keep track of the objective function values so that we can pick the best MD estimate (lowest objfn_values)
-    min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat1),
-                                P_list=lapply(M_S_joint_list_hat1, get_transition_probs_from_M_S_joint),
-                                convergence=solnp_result1$convergence,
-                                objfn_values=solnp_result1$values)
+    ## TODO Also return estimates of initial distribution
+    min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat_solnp),
+                                P_list=lapply(M_S_joint_list_hat_solnp, get_transition_probs_from_M_S_joint),
+                                pr_y_nloptr=t(M_Y_given_S_hat_nloptr),
+                                P_list_nloptr=lapply(M_S_joint_list_hat_nloptr, get_transition_probs_from_M_S_joint),
+                                convergence=solnp_result$convergence,
+                                objfn_values=solnp_result$values,
+                                nloptr_message=nloptr_result$message,
+                                nloptr_iterations=nloptr_result$iterations,
+                                nloptr_status=nloptr_result$status)
 
     return(min_dist_params_hat)
 
@@ -152,7 +187,7 @@ get_transition_probs_from_M_S_joint <- function(M_S_joint) {
 }
 
 objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_list, M_fixed_y_Y_joint_hat_list,
-                                   max_time, n_components, W_matrix=NULL) {
+                                   max_time, n_components) {
     ## Objective function for minimum distance estimation with time-varying transition probabilities, time-invariant misclassification probabilities
     stopifnot(is.vector(x))
     stopifnot(length(x) == max_time * n_components^2)
@@ -190,11 +225,13 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
                     M_Y_joint_hat_list[[time_index]], type="F"))  # Equation 7 in paper (20170511 PDF)
     })
     g <- c(g1_vector, g2_vector)
-    if(is.null(W_matrix)) {
-        W_matrix <- diag(length(g))
+
+    weights <- NULL
+    if(is.null(weights)) {
+        weights <- diag(length(g))
     }
-    stopifnot(nrow(W_matrix) == length(g) && ncol(W_matrix) == length(g))
-    return(as.vector(t(g) %*% W_matrix %*% g))
+    stopifnot(nrow(weights) == length(g) && ncol(weights) == length(g))
+    return(as.vector(t(g) %*% weights %*% g))
 }
 
 eq_function_minimum_distance <- function(x,
@@ -202,8 +239,7 @@ eq_function_minimum_distance <- function(x,
                                          M_Y_joint_hat_list,
                                          M_fixed_y_Y_joint_hat_list,
                                          max_time,
-                                         n_components,
-                                         W_matrix=NULL) {
+                                         n_components) {
     ## Constraint function for minimum distance estimation (constraint is eq_function(x) = 1 everywhere)
     ## "The main and constraint functions must take the exact same arguments, irrespective of whether they are used"
     stopifnot(is.vector(x))
@@ -214,7 +250,8 @@ eq_function_minimum_distance <- function(x,
         return(matrix(x[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
 
-    return(c(colSums(candidate_M_Y_given_S), sapply(candidate_M_S_joint_list, sum)))
+    ## Note: subtract 1 so that the contraint function must always equal zero, which makes it easier to use with nloptr
+    return(c(colSums(candidate_M_Y_given_S), sapply(candidate_M_S_joint_list, sum)) - 1.0)
 }
 
 valid_panel_element <- function(panel_element, params) {

@@ -1,8 +1,9 @@
+library(Rsolnp)
 library(data.table)
 library(ggplot2)
 library(grid)
 library(latex2exp)  # For ggplot2 xlab
-library(Rsolnp)
+library(nloptr)
 
 source("hmm_functions.R")
 source("hmm_parameters.R")
@@ -27,7 +28,6 @@ panel[[1]]
 length(panel[[1]]$y)
 
 ## Use the simulated panel data to estimate the model's parameters using params0, params1, and params2 as initial values
-
 
 ## Initialize EM at true parameter values (easy case)
 params0_hat <- get_expectation_minimization_estimates(panel, params0, max_iter=20, epsilon=0.001)
@@ -140,6 +140,13 @@ min_dist_params0_hat <- get_min_distance_estimates(params0, M_Y_joint_hat_list, 
 ## Essentially zero: we get the same min dist results starting from either params0 or params1
 max(abs(min_dist_params0_hat$pr_y - min_dist_params1_hat$pr_y))
 max(abs(c(min_dist_params0_hat$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list, recursive=TRUE)))
+
+## Compare minimum distance estimates to true parameters
+max(abs(params0$pr_y - min_dist_params1_hat$pr_y))
+max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list, recursive=TRUE)))
+
+max(abs(params0$pr_y - min_dist_params1_hat$pr_y_nloptr))
+max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list_nloptr, recursive=TRUE)))
 
 ## Check that minimum distance estimation returns correct parameter values when using population values for the distribution of Y_t
 ## Compare to sample analogue M_Y_joint_hat_list
