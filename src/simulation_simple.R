@@ -3,7 +3,6 @@ library(data.table)
 library(ggplot2)
 library(grid)
 library(latex2exp)  # For ggplot2 xlab
-library(nloptr)
 
 source("hmm_functions.R")
 source("hmm_parameters.R")
@@ -131,6 +130,7 @@ M_S_joint_incorrect <- lapply(seq_along(params1$P_list), function(time_index) {
 })
 
 ## Minimum distance estimation starting from incorrect parameters
+min_dist_params2_hat <- get_min_distance_estimates(params1, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 min_dist_params1_hat <- get_min_distance_estimates(params1, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 
 ## Minimum distance estimation starting from correct parameters
@@ -140,13 +140,13 @@ min_dist_params0_hat <- get_min_distance_estimates(params0, M_Y_joint_hat_list, 
 max(abs(min_dist_params0_hat$pr_y - min_dist_params1_hat$pr_y))
 max(abs(c(min_dist_params0_hat$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list, recursive=TRUE)))
 
-## Compare minimum distance estimates to true parameters
+## Compare minimum distance estimates to true parameters (distances should be small)
 max(abs(params0$pr_y - min_dist_params1_hat$pr_y))
 max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list, recursive=TRUE)))
 
-## Compare MD estimates using nloptr to true parameters -- careful, nloptr is just returning the initial x_guess!
-max(abs(params0$pr_y - min_dist_params1_hat$pr_y_nloptr))
-max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list_nloptr, recursive=TRUE)))
+max(abs(params0$pr_y - min_dist_params2_hat$pr_y))
+max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params2_hat$P_list, recursive=TRUE)))
+
 
 ## Check that minimum distance estimation returns correct parameter values when using population values for the distribution of Y_t
 ## Compare to sample analogue M_Y_joint_hat_list
@@ -181,8 +181,8 @@ min_dist_params1_hat_population$objfn_values
 ## Note convergence code of 2 and "Solution not reliable....Problem Inverting Hessian" warning
 min_dist_params2_hat_population <- get_min_distance_estimates(params2, M_Y_joint_hat_population, M_Y_joint_hat_inverse_population, M_fixed_y_Y_joint_hat_population, dtable)
 
-## Optimizer should get the distance (objective function) down to zero, but doesn't when starting from params2
+## Optimizer should get the distance (objective function) down to zero also when starting from params2
 min_dist_params2_hat_population$objfn_values
 
-## This distance should be zero, but isn't when beginning optimization from params2
+## This distance should be zero also when starting optimization from params2
 max(abs(c(min_dist_params2_hat_population$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))

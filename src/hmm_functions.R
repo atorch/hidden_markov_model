@@ -48,41 +48,12 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
     n_components <- initial_params$n_components
 
-    nloptr_local_opts <- list("algorithm"="NLOPT_GN_DIRECT",
-                              "xtol_rel"=0.001,
-                              "ftol_rel"=0.001,
-                              "ftol_abs"=0.001,
-                              "xtol_abs"=0.001)
-    nloptr_opts <- list("algorithm"="NLOPT_LN_AUGLAG",
-                        "xtol_rel"=0.001,
-                        "ftol_rel"=0.001,
-                        "ftol_abs"=0.001,
-                        "xtol_abs"=0.001,
-                        "maxeval"=10,
-                        "local_opts"=nloptr_local_opts,
-                        "print_level"=2)
-
-    nloptr_result <- nloptr(x0=x_guess,
-                            eval_f=objfn_minimum_distance,
-                            lb=rep(0, length(x_guess)),
-                            ub=rep(1, length(x_guess)),
-                            eval_g_eq=eq_function_minimum_distance,
-                            M_Y_joint_hat_list=M_Y_joint_hat_list,
-                            M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
-                            M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
-                            max_time=max_time,
-                            n_components=n_components,
-                            opts=nloptr_opts)
-
-    M_Y_given_S_hat_nloptr <- matrix(nloptr_result$solution[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
-    M_S_joint_list_hat_nloptr <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
-        return(matrix(nloptr_result$solution[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
-    })
+    n_equality_constraints <- n_components + 1 + n_components * (max(dtable$time) - 2)
 
     solnp_result <- solnp(x_guess,
                           fun=objfn_minimum_distance,
                           eqfun=eq_function_minimum_distance,
-                          eqB=rep(0, n_components + max(dtable$time) - 1),
+                          eqB=rep(0, n_equality_constraints),
                           LB=rep(0, length(x_guess)),
                           UB=rep(1, length(x_guess)),
                           M_Y_joint_hat_list=M_Y_joint_hat_list,
@@ -101,16 +72,9 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
     ## TODO Also return estimates of initial distribution
     min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat_solnp),
                                 P_list=lapply(M_S_joint_list_hat_solnp, get_transition_probs_from_M_S_joint),
-                                pr_y_nloptr=t(M_Y_given_S_hat_nloptr),
-                                P_list_nloptr=lapply(M_S_joint_list_hat_nloptr, get_transition_probs_from_M_S_joint),
                                 convergence=solnp_result$convergence,
                                 objfn_values=solnp_result$values,
-                                nloptr_message=nloptr_result$message,
-                                nloptr_iterations=nloptr_result$iterations,
-                                nloptr_objective=nloptr_result$objective,
-                                nloptr_status=nloptr_result$status,
-                                x_guess=x_guess,
-                                nloptr_solution=nloptr_result$solution)
+                                x_guess=x_guess)
 
     return(min_dist_params_hat)
 
@@ -259,8 +223,13 @@ eq_function_minimum_distance <- function(x,
         return(matrix(x[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
 
-    ## Note: subtract 1 so that the contraint function must always equal zero, which makes it easier to use with nloptr
-    return(c(colSums(candidate_M_Y_given_S), sapply(candidate_M_S_joint_list, sum)) - 1.0)
+    candidate_M_S_rowSums <- sapply(candidate_M_S_joint_list, rowSums)
+    candidate_M_S_colSums <- sapply(candidate_M_S_joint_list, colSums)
+
+    differences_in_marginal_distributions <- candidate_M_S_rowSums[, 1:(max_time - 2)] - candidate_M_S_colSums[, 2:(max_time - 1)]
+
+    ## Note: subtract 1 from probabilities so that the contraint function must always equal zero
+    return(c(colSums(candidate_M_Y_given_S) - 1.0, sum(candidate_M_S_joint_list[[1]]) - 1.0, differences_in_marginal_distributions))
 }
 
 valid_panel_element <- function(panel_element, params) {
