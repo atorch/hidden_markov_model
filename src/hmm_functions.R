@@ -48,15 +48,13 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
     n_components <- initial_params$n_components
 
-    ## The algorithm NLOPT_LN_AUGLAG_EQ needs a local optimizer; specify an algorithm and termination condition in local_opts
-    nloptr_local_opts <- list(algorithm="NLOPT_LN_COBYLA",
-                              xtol_rel=1.0e-5,
-                              maxeval=100000)
-    nloptr_opts <- list(algorithm="NLOPT_LN_AUGLAG_EQ",
-                        local_opts=nloptr_local_opts,
-                        xtol_rel=1.0e-5,
+    nloptr_opts <- list(algorithm="NLOPT_GN_ISRES",
+                        xtol_rel=1.0e-3,
+                        ftol_rel=1.0e-3,
+                        xtol_abs=1.0e-3,
+                        ftol_abs=1.0e-3,
                         maxeval=100000,
-                        print_level=0)
+                        print_level=2)
 
     nloptr_result <- nloptr(x0=x_guess,
                             eval_f=objfn_minimum_distance,
@@ -103,6 +101,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
                                 objfn_values=solnp_result$values,
                                 nloptr_message=nloptr_result$message,
                                 nloptr_iterations=nloptr_result$iterations,
+                                nloptr_objective=nloptr_result$objective,
                                 nloptr_status=nloptr_result$status)
 
     return(min_dist_params_hat)
@@ -191,6 +190,8 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
     ## Objective function for minimum distance estimation with time-varying transition probabilities, time-invariant misclassification probabilities
     stopifnot(is.vector(x))
     stopifnot(length(x) == max_time * n_components^2)
+
+    ## TODO Update equation references
     candidate_M_Y_given_S <- matrix(x[seq(1, n_components^2)], n_components, n_components)
     candidate_M_S_joint_list <- lapply(seq_len(max_time - 1), function(time_index) {
         return(matrix(x[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
@@ -201,7 +202,7 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
             candidate_M_S_joint <- candidate_M_S_joint_list[[fixed_t + 1]]
             candidate_P <- t(candidate_M_S_joint / matrix(colSums(candidate_M_S_joint),
                                                           nrow(candidate_M_S_joint),
-                                                          ncol(candidate_M_S_joint), byrow=TRUE))  # From t+1 to t+2  # Careful with transpose!  There was a bug here
+                                                          ncol(candidate_M_S_joint), byrow=TRUE))  # From t+1 to t+2
             candidate_D <- matrix(0, n_components, n_components)
             diag(candidate_D) <- candidate_P %*% candidate_M_Y_given_S[fixed_y, ]
             return(candidate_D)
@@ -215,14 +216,14 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
                         M_Y_joint_hat_inverse_list[[time_index]] %*%
                         candidate_M_Y_given_S -
                         candidate_M_Y_given_S %*%
-                        candidate_D_list[[fixed_y]][[time_index]], type="F"))  # Equation 9 in paper (20170511 PDF)
+                        candidate_D_list[[fixed_y]][[time_index]], type="F"))
         })
     })
     g1_vector <- c(g1_vectors_for_fixed_y, recursive=TRUE)
     g2_vector <- sapply(seq_along(candidate_M_S_joint_list), function(time_index) {
         return(norm(candidate_M_Y_given_S %*%
                     candidate_M_S_joint_list[[time_index]] %*% t(candidate_M_Y_given_S) -
-                    M_Y_joint_hat_list[[time_index]], type="F"))  # Equation 7 in paper (20170511 PDF)
+                    M_Y_joint_hat_list[[time_index]], type="F"))
     })
     g <- c(g1_vector, g2_vector)
 

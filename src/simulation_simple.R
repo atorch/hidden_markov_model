@@ -135,7 +135,7 @@ M_S_joint_incorrect <- lapply(seq_along(params1$P_list), function(time_index) {
 min_dist_params1_hat <- get_min_distance_estimates(params1, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 
 ## Minimum distance estimation starting from correct parameters
-min_dist_params0_hat <- get_min_distance_estimates(params0, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
+Min_dist_params0_hat <- get_min_distance_estimates(params0, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 
 ## Essentially zero: we get the same min dist results starting from either params0 or params1
 max(abs(min_dist_params0_hat$pr_y - min_dist_params1_hat$pr_y))
