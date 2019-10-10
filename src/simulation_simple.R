@@ -104,7 +104,7 @@ P2_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[2]])
 P3_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[3]])
 
 ## Compute the joint distribution of hidden states (S_t, S_{t+1}) implied by params0
-M_S_joint_list_population <- lapply(seq_along(params0$P_list), function(time_index) {
+M_S_joint_population <- lapply(seq_along(params0$P_list), function(time_index) {
     if(time_index == 1) {
         mu_t <- params0$mu  # Equals initial distribution when t=1
     } else {
@@ -113,14 +113,14 @@ M_S_joint_list_population <- lapply(seq_along(params0$P_list), function(time_ind
     stopifnot(isTRUE(all.equal(sum(mu_t), 1)))  # Valid probability distribution, careful comparing floats
     return(t(params0$P_list[[time_index]] * matrix(mu_t, length(mu_t), length(mu_t))))
 })
-M_Y_joint_list_population <- lapply(M_S_joint_list_population, function(M) {
+M_Y_joint_population <- lapply(M_S_joint_population, function(M) {
     return(t(params0$pr_y) %*% M %*% params0$pr_y)
 })
 
 ## Compare to P1_hat_naive, P2_hat_naive, ...
-P_naive_population <- lapply(M_Y_joint_list_population, get_transition_probs_from_M_S_joint)
+P_naive_population <- lapply(M_Y_joint_population, get_transition_probs_from_M_S_joint)
 
-M_S_joint_list_incorrect <- lapply(seq_along(params1$P_list), function(time_index) {
+M_S_joint_incorrect <- lapply(seq_along(params1$P_list), function(time_index) {
     ## Under incorrect params1 as opposed to params0
     if(time_index == 1) {
         mu_t <- params1$mu  # Equals initial distribution when t=1
@@ -144,17 +144,17 @@ max(abs(c(min_dist_params0_hat$P_list, recursive=TRUE) - c(min_dist_params1_hat$
 ## Check that minimum distance estimation returns correct parameter values when using population values for the distribution of Y_t
 ## Compare to sample analogue M_Y_joint_hat_list
 ## Careful, my pr_y has hidden states along the rows, transpose of misclassification matrix in paper
-M_Y_joint_hat_list_population <- lapply(M_S_joint_list_population, function(M) {
+M_Y_joint_hat_population <- lapply(M_S_joint_population, function(M) {
     return(t(params0$pr_y) %*% M %*% params0$pr_y)
 })
-M_Y_joint_hat_inverse_list_population <- lapply(M_Y_joint_hat_list_population, solve)
+M_Y_joint_hat_inverse_population <- lapply(M_Y_joint_hat_population, solve)
 
 ## Compare to sample analogue M_fixed_y_Y_joint_hat_list
-M_fixed_y_Y_joint_hat_list_population <- lapply(seq_len(params0$n_components), function(fixed_y) {
+M_fixed_y_Y_joint_hat_population <- lapply(seq_len(params0$n_components), function(fixed_y) {
     lapply(seq_len(length(params0$P_list) - 1), function(fixed_t) {
         D <- matrix(0, params0$n_components, params0$n_components)
         diag(D) <- params0$P_list[[fixed_t + 1]] %*% t(params0$pr_y)[fixed_y, ]  # Symmetric
-        return(t(params0$pr_y) %*% D %*% solve(t(params0$pr_y)) %*% M_Y_joint_hat_list_population[[fixed_t]])
+        return(t(params0$pr_y) %*% D %*% solve(t(params0$pr_y)) %*% M_Y_joint_hat_population[[fixed_t]])
     })
 })
 
@@ -162,7 +162,7 @@ M_fixed_y_Y_joint_hat_list_population <- lapply(seq_len(params0$n_components), f
 ## Despite the incorrect starting values, the estimation should recover the true parameters without error
 ## The optimizer should be able to get the objective function down to zero
 
-min_dist_params1_hat_population <- get_min_distance_estimates(params1, M_Y_joint_hat_list_population, M_Y_joint_hat_inverse_list_population, M_fixed_y_Y_joint_hat_list_population, dtable)
+min_dist_params1_hat_population <- get_min_distance_estimates(params1, M_Y_joint_hat_population, M_Y_joint_hat_inverse_population, M_fixed_y_Y_joint_hat_population, dtable)
 
 ## This distance should be essentially zero: the estimates ("hats") recover the true parameters when given population (not sample) observation probabilities
 max(abs(c(min_dist_params1_hat_population$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))
@@ -172,4 +172,4 @@ min_dist_params1_hat_population$objfn_values
 
 ## Try again with population, now starting the optimization from params2 ("more incorrect" than params1)
 ## Note convergence code of 2 and "Solution not reliable....Problem Inverting Hessian" warning
-min_dist_params2_hat_population <- get_min_distance_estimates(params2, M_Y_joint_hat_list_population, M_Y_joint_hat_inverse_list_population, M_fixed_y_Y_joint_hat_list_population, dtable)
+min_dist_params2_hat_population <- get_min_distance_estimates(params2, M_Y_joint_hat_population, M_Y_joint_hat_inverse_population, M_fixed_y_Y_joint_hat_population, dtable)
