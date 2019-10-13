@@ -68,7 +68,6 @@ get_data_table_summarizing_single_county_simulation <- function(county) {
 
 ##Import data
 iterDat <- rbindlist(lapply(fileReadVec, function(x) fread(paste0('county_simulation_',x,'_Desc.csv'))[,simID := .I]),idcol='fileID')
-iterDat <- iterDat[!(simID == 7 & fileID == 1)] ##TEMPORARY FIX
 county_df  <- NULL
 for (f in seq_len(length(fileReadVec))){
     county_dfs <- list()

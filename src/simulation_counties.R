@@ -5,29 +5,16 @@ library(parallel)
 source("hmm_functions.R")
 
 
-
-## simulation_df <- data.frame(n_points_per_county=c(100, 500, 1000, rep(1000,8)),
-##                             n_counties=c(100, 100, 100, rep(100,8)),
-##                             n_time_periods=c(4, 4, 4 , rep(4, 8)),
-##                             n_components = c(2, 2, 2, rep(2, 8)),
-##                             mu1 = c(90, 90, 90, rep(90,8)), ##Put in as percent
-##                             defRt1 = c(4, 4, 4, rep(4,8)), ##In as percent
-##                             defRtMid = c(10, 10, 10, rep(10,8)), ##same
-##                             defRtLast = c(20, 20, 20, seq(5,40,by=5)),
-##                             prY11 = c(90, 90, 90,rep(90,8)), ##Correct classification Probability 1,1 in matrix
-##                             prY22 = c(80, 80, 80, rep(80,8))) ##Correct classification Probability 2,2 in matrix
-
-
-simulation_df <- data.frame(n_points_per_county=c( rep(1000,6)),
-                            n_counties=c(rep(100,6)),
-                            n_time_periods=c(5, 6, rep(4,4)),
-                            n_components = c(rep(2,6)),
-                            mu1 = c(rep(90,6)), ##Put in as percent
-                            defRt1 = c(rep(4,6)), ##In as percent
-                            defRtMid = c(rep(10,6)), ##same
-                            defRtLast = c(rep(20,6)),
-                            prY11 = c(rep(90,2),75,80,85,95), ##Misclassification Probability 1,1 in matrix
-                            prY22 = c(rep(80,6))) ##Misclassification Probability 2,2 in matrix
+simulation_df <- data.frame(n_points_per_county=c(100, 500, rep(1000,14)),
+                            n_counties=c(rep(100,16)),
+                            n_time_periods=c( rep(4, 10),5,6,rep(4,4)),
+                            n_components = c(rep(2, 16)),
+                            mu1 = c(rep(90,16)), ##Put in as percent
+                            defRt1 = c(rep(4,16)), ##In as percent
+                            defRtMid = c(rep(10,16)), ##same
+                            defRtLast = c(20, 20, seq(5,40,by=5),rep(20,6)),
+                            prY11 = c(rep(90,13),75,80,95), ##Correct classification Probability 1,1 in matrix
+                            prY22 = c(rep(80,16))) ##Correct classification Probability 2,2 in matrix
 
 
 max_cores <- 4
