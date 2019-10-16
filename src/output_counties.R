@@ -7,7 +7,7 @@ library(stringr)
 source("hmm_functions.R")
 
 
-fileReadVec <-c('2019-10-01 21:48:17', '2019-10-03 16:39:03')
+fileReadVec <-c('2019-10-13 14:18:30')
 
 get_data_table_summarizing_single_county_simulation <- function(county) {
 
@@ -68,6 +68,7 @@ get_data_table_summarizing_single_county_simulation <- function(county) {
 
 ##Import data
 iterDat <- rbindlist(lapply(fileReadVec, function(x) fread(paste0('county_simulation_',x,'_Desc.csv'))[,simID := .I]),idcol='fileID')
+
 county_df  <- NULL
 for (f in seq_len(length(fileReadVec))){
     county_dfs <- list()
@@ -91,6 +92,9 @@ county_df_melt  <- melt(county_df,id.vars = c('time','county_id',
                                                'true_deforestation_probability','true_reforestation_probability','true_misclassification_probability_1','true_misclassification_probability_2','true_mu1','x','fixed_effect','simID','fileID'))
 
 county_df_melt  <- merge(county_df_melt, iterDat)
+
+##Elimate Duplicated Rows
+county_df_melt  <- county_df_melt[!iterDat[duplicated(iterDat[,2:10]),list(simID,fileID)],on=c('simID','fileID')]
 
 county_df_melt[ prY11 == 90 & n_time_periods == 4 & time == 3 & defRtLast == 20 & n_points_per_county == 1000 & variable %like% 'deforestation_probability', list(mse = mean((value - true_deforestation_probability)^2),
                                                                   bias = mean(value - true_deforestation_probability),

@@ -5,16 +5,16 @@ library(parallel)
 source("hmm_functions.R")
 
 
-simulation_df <- data.frame(n_points_per_county=c(100, 500, rep(1000,14)),
-                            n_counties=c(rep(100,16)),
-                            n_time_periods=c( rep(4, 10),5,6,rep(4,4)),
-                            n_components = c(rep(2, 16)),
-                            mu1 = c(rep(90,16)), ##Put in as percent
-                            defRt1 = c(rep(4,16)), ##In as percent
-                            defRtMid = c(rep(10,16)), ##same
-                            defRtLast = c(20, 20, seq(5,40,by=5),rep(20,6)),
-                            prY11 = c(rep(90,13),75,80,95), ##Correct classification Probability 1,1 in matrix
-                            prY22 = c(rep(80,16))) ##Correct classification Probability 2,2 in matrix
+simulation_df <- data.frame(n_points_per_county=c(100, 500, rep(1000,13)),
+                            n_counties=c(rep(100,15)),
+                            n_time_periods=c( rep(4, 10),5,6,rep(4,3)),
+                            n_components = c(rep(2, 15)),
+                            mu1 = c(rep(90,15)), ##Put in as percent
+                            defRt1 = c(rep(4,15)), ##In as percent
+                            defRtMid = c(rep(10,15)), ##same
+                            defRtLast = c(20, 20, seq(5,40,by=5),rep(20,5)),
+                            prY11 = c(rep(90,12),75,80,95), ##Correct classification Probability 1,1 in matrix
+                            prY22 = c(rep(80,15))) ##Correct classification Probability 2,2 in matrix
 
 
 max_cores <- 4

@@ -85,6 +85,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
     min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat_solnp),
                                 P_list=lapply(M_S_joint_list_hat_solnp, get_transition_probs_from_M_S_joint),
                                 convergence=solnp_result$convergence,
+                                mu = M_S_joint_list_hat_solnp[[1]][1,1] +  M_S_joint_list_hat_solnp[[1]][2,1],
                                 objfn_values=solnp_result$values,
                                 x_guess=x_guess)
 
