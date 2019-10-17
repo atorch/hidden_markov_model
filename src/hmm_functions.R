@@ -93,7 +93,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
 }
 
-get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, panel, n_random_starts=5) {
+get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, panel, n_random_starts=10) {
 
     ## Params0 are true HMM parameters used to generate data
 
@@ -184,6 +184,7 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
                 "min_dist_params_hat"=min_dist_params_hat,
                 "min_dist_objfn_values"=min_dist_objfn_values,
                 "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
+                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant,
                 "min_dist_params_hat_diag_dominant_best_objfn"=min_dist_params_hat_diag_dominant_best_objfn))
 }
 
