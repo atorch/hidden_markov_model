@@ -2,11 +2,11 @@ get_deforestation_prob_from_P <- function(P) {
     ## Note: this assumes we have 2 hidden states, and state 1 is forest
     return(P[1, 2])
 }
+
 get_reforestation_prob_from_P <- function(P) {
     ## Note: this assumes we have 2 hidden states, and state 1 is forest
     return(P[2, 1])
 }
-
 
 get_random_initial_parameters <- function(params0) {
 
@@ -28,17 +28,18 @@ get_random_initial_parameters <- function(params0) {
     })
 
     ## Probabilities on the diagonals of the observation probability matrix pr_y
-    ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
-    ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$pr_y? 
     random_uniform <- runif(params0$n_components, min=0.6, max=0.98)
     initial_parameters$pr_y <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$pr_y), ncol=ncol(params0$pr_y))
     diag(initial_parameters$pr_y) <- random_uniform
 
-    ## TR -- Modify, randomize initial distribution of mu
-    mu1  <- runif(1, min = params0$mu[1]-.05, max = params0$mu+.05)
-    initial_parameters$mu <- c(mu1, 1-mu1) 
+    initial_parameters$mu <- runif(n=params0$n_components)
+    initial_parameters$mu <- initial_parameters$mu / sum(initial_parameters$mu)
 
     return(initial_parameters)
+}
+
+is_diag_dominant <- function(pr_y) {
+    return(all(diag(pr_y) > 0.5))
 }
 
 get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
@@ -81,11 +82,10 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
     })
     
     ## Note: we keep track of the objective function values so that we can pick the best MD estimate (lowest objfn_values)
-    ## TODO Also return estimates of initial distribution
     min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat_solnp),
                                 P_list=lapply(M_S_joint_list_hat_solnp, get_transition_probs_from_M_S_joint),
                                 convergence=solnp_result$convergence,
-                                mu = M_S_joint_list_hat_solnp[[1]][1,1] +  M_S_joint_list_hat_solnp[[1]][2,1],
+                                mu=colSums(M_S_joint_list_hat_solnp[[1]]),
                                 objfn_values=solnp_result$values,
                                 x_guess=x_guess)
 
@@ -137,21 +137,41 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
         })
     })
 
-    min_dist_params_hat_list <- lapply(random_initial_parameters,
-                                       get_min_distance_estimates,
-                                       M_Y_joint_hat_list=M_Y_joint_hat_list,
-                                       M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
-                                       M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
-                                       dtable=dtable)
+    min_dist_params_hat <- lapply(random_initial_parameters,
+                                  get_min_distance_estimates,
+                                  M_Y_joint_hat_list=M_Y_joint_hat_list,
+                                  M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
+                                  M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
+                                  dtable=dtable)
 
-    min_dist_objfn_values <- sapply(min_dist_params_hat_list, function(x) {
+    min_dist_objfn_values <- sapply(min_dist_params_hat, function(x) {
         return(min(x$objfn_values))
     })
 
-    ## TODO: the "best" min dist estimates are sometimes "stuck" at the wrong edge of the parameter space,
+    ## Note: the "best" min dist estimates are sometimes stuck at the wrong edge of the parameter space,
     ## e.g. the estimated deforestation probabilities are 100% when the true rate is close to 0%
     ## Check whether the estimated pr_y is diagonally dominant in these cases!
-    min_dist_params_hat_best_objfn <- min_dist_params_hat_list[[which.min(min_dist_objfn_values)]]
+    min_dist_params_hat_best_objfn <- min_dist_params_hat[[which.min(min_dist_objfn_values)]]
+
+    min_dist_pr_y_is_diag_dominant <- sapply(min_dist_params_hat, function(x) {
+        return(is_diag_dominant(x$pr_y))
+    })
+
+    if(any(min_dist_pr_y_is_diag_dominant)) {
+
+        min_dist_params_hat_diag_dominant <- min_dist_params_hat[which(min_dist_pr_y_is_diag_dominant)]
+
+        min_dist_objfn_values_diag_dominant <- sapply(min_dist_params_hat_diag_dominant, function(x) {
+            return(min(x$objfn_values))
+        })
+
+        min_dist_params_hat_diag_dominant_best_objfn <- min_dist_params_hat_diag_dominant[[which.min(min_dist_objfn_values_diag_dominant)]]
+
+    } else {
+
+        ## Note: none of the min dist estimates had diagonally dominant pr_y
+        min_dist_params_hat_diag_dominant_best_objfn <- NULL
+    }
 
     em_params_hat_best_likelihood <- em_params_hat_list[[which.max(em_likelihoods)]]
 
@@ -161,9 +181,10 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
                 "hmm_params_hat_loglikelihoods"=em_likelihoods,
                 "initial_parameters_list"=random_initial_parameters,
                 "em_params_hat_best_likelihood"=em_params_hat_best_likelihood,
-                "min_dist_params_hat_list"=min_dist_params_hat_list,
+                "min_dist_params_hat"=min_dist_params_hat,
                 "min_dist_objfn_values"=min_dist_objfn_values,
-                "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn))
+                "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
+                "min_dist_params_hat_diag_dominant_best_objfn"=min_dist_params_hat_diag_dominant_best_objfn))
 }
 
 get_transition_probs_from_M_S_joint <- function(M_S_joint) {
