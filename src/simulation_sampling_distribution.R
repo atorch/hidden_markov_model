@@ -150,7 +150,7 @@ p  # Looks correct, compare to params0 -- careful, lots of estimates hit max_ite
 ## Do min dist estimates vary with initial parameters?
 P_hat_range_min_dist <- c(lapply(all_simulations, function(list_of_replications) {
     sapply(list_of_replications, function(replication) {
-        matrix_of_P_hat <- sapply(replication$min_dist_params_hat_list, function(x) {
+        matrix_of_P_hat <- sapply(replication$min_dist_params_hat, function(x) {
             return(c(x$P_list, recursive=TRUE))
         })
         P_hat_range <- max(apply(matrix_of_P_hat, 1, max) - apply(matrix_of_P_hat, 1, min))

@@ -35,11 +35,11 @@ simulations_large_errors[[1]]$estimates$min_dist_params_hat_best_objfn$mu
 simulations_large_errors[[1]]$estimates$em_params_hat_best_likelihood$pr_y
 
 ## How did the other min dist estimates do?
-lapply(simulations_large_errors[[1]]$estimates$min_dist_params_hat_list, function(x) {
+lapply(simulations_large_errors[[1]]$estimates$min_dist_params_hat, function(x) {
     return(x$pr_y)
 })
 
-other_min_dist_estimate <- simulations_large_errors[[1]]$estimates$min_dist_params_hat_list[[2]]
+other_min_dist_estimate <- simulations_large_errors[[1]]$estimates$min_dist_params_hat[[2]]
 
 ## This min dist estimate got much closer to the truth (i.e. to simulations_large_errors[[1]]$params$P_list)
 other_min_dist_estimate$P_list
