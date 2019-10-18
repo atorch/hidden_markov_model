@@ -62,11 +62,16 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
     n_equality_constraints <- n_components + 1 + n_components * (max(dtable$time) - 2)
 
+    ## Note: the lower bound for the diagonals of pr_y is 0.5 (to make pr_y diagonally dominant);
+    ## the lower bound for all other parameters is zero
+    lower_bound <- rep(0, length(x_guess))
+    lower_bound[which(c(diag(initial_params$n_components)) > 0)] = 0.5
+
     solnp_result <- solnp(x_guess,
                           fun=objfn_minimum_distance,
                           eqfun=eq_function_minimum_distance,
                           eqB=rep(0, n_equality_constraints),
-                          LB=rep(0, length(x_guess)),
+                          LB=lower_bound,
                           UB=rep(1, length(x_guess)),
                           M_Y_joint_hat_list=M_Y_joint_hat_list,
                           M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
@@ -148,30 +153,11 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
         return(min(x$objfn_values))
     })
 
-    ## Note: the "best" min dist estimates are sometimes stuck at the wrong edge of the parameter space,
-    ## e.g. the estimated deforestation probabilities are 100% when the true rate is close to 0%
-    ## Check whether the estimated pr_y is diagonally dominant in these cases!
     min_dist_params_hat_best_objfn <- min_dist_params_hat[[which.min(min_dist_objfn_values)]]
 
     min_dist_pr_y_is_diag_dominant <- sapply(min_dist_params_hat, function(x) {
         return(is_diag_dominant(x$pr_y))
     })
-
-    if(any(min_dist_pr_y_is_diag_dominant)) {
-
-        min_dist_params_hat_diag_dominant <- min_dist_params_hat[which(min_dist_pr_y_is_diag_dominant)]
-
-        min_dist_objfn_values_diag_dominant <- sapply(min_dist_params_hat_diag_dominant, function(x) {
-            return(min(x$objfn_values))
-        })
-
-        min_dist_params_hat_diag_dominant_best_objfn <- min_dist_params_hat_diag_dominant[[which.min(min_dist_objfn_values_diag_dominant)]]
-
-    } else {
-
-        ## Note: none of the min dist estimates had diagonally dominant pr_y
-        min_dist_params_hat_diag_dominant_best_objfn <- NULL
-    }
 
     em_params_hat_best_likelihood <- em_params_hat_list[[which.max(em_likelihoods)]]
 
