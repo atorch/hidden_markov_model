@@ -170,8 +170,7 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
                 "min_dist_params_hat"=min_dist_params_hat,
                 "min_dist_objfn_values"=min_dist_objfn_values,
                 "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
-                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant,
-                "min_dist_params_hat_diag_dominant_best_objfn"=min_dist_params_hat_diag_dominant_best_objfn))
+                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant))
 }
 
 get_transition_probs_from_M_S_joint <- function(M_S_joint) {
