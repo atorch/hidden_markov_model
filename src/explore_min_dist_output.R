@@ -8,7 +8,8 @@ max_abs <- function(x) {
 infile <- "county_simulation_2019-10-15 20:10:08_iter_3.rds"
 
 ## Generated _after_ adding diag dominant pr_y constraint to hmm_functions.R
-infile <- "county_simulation_2019-10-17 18:47:20_iter_1.rds"
+infile <- "county_simulation_2019-10-17 18:47:20_iter_1.rds"  # Only 100 points per county (tiny sample size!)
+infile <- "county_simulation_2019-10-17 18:47:20_iter_2.rds"  # 500 points per county
 
 simulations <- readRDS(infile)
 

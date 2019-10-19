@@ -7,7 +7,7 @@ library(stringr)
 source("hmm_functions.R")
 
 
-fileReadVec <-c('2019-10-13 14:18:30')
+fileReadVec <-c('2019-10-17 18:47:20')
 
 get_data_table_summarizing_single_county_simulation <- function(county) {
 
@@ -287,10 +287,4 @@ sink()
 ##                                                                                            function(e) outFunc(defForestPrDat,n,e,'sd',1)),collapse='&')),collapse='&'),'\\\\\n')
 ## cat('&RMSE &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
 ##                                                                        function(e) outFunc(defForestPrDat,n,e,'rmse',1)),collapse='&')),collapse='&'),'\\\\\n')
-
-
-## stargazer(simulation_df,
-##           summary=FALSE,
-##           rownames=FALSE,
-##           out=simulation_df_outfile)
                        
