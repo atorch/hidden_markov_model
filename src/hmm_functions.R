@@ -64,6 +64,8 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
     ## Note: the lower bound for the diagonals of pr_y is 0.5 (to make pr_y diagonally dominant);
     ## the lower bound for all other parameters is zero
+    ## The index using which(c(diag(initial_params$n_components)) > 0) assumes that the first params$n_components^2 elements
+    ## of the x_guess vector (i.e. the argument to objfn_minimum_distance) represent the observation probability matrix pr_y
     lower_bound <- rep(0, length(x_guess))
     lower_bound[which(c(diag(initial_params$n_components)) > 0)] = 0.5
 
