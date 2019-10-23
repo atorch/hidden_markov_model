@@ -7,7 +7,7 @@ library(stringr)
 source("hmm_functions.R")
 
 
-fileReadVec <-c('2019-10-17 18:47:20')
+fileReadVec <-c('2019-10-21 18:43:53')
 
 get_data_table_summarizing_single_county_simulation <- function(county) {
 
@@ -36,11 +36,10 @@ get_data_table_summarizing_single_county_simulation <- function(county) {
 
     
     ## EM means expectation-maximization, MD means minimum distance
-    return(data.table(x=county$X,
+    return(data.table(x=county$deforestation_rates,
                       fixed_effect=county$fixed_effect,
-                      time=seq_along(county$X),
+                      time=seq_along(county$deforestation_rates),
                       county_id=county$id,
-
                       
                       true_deforestation_probability=true_deforestation_prob,
                       true_reforestation_probability=true_reforestation_prob,
@@ -88,8 +87,11 @@ for (f in seq_len(length(fileReadVec))){
 graphCol  <- setNames(c('green','blue','purple'),c('Frequency','MD','EM'))
 
 ##Make Graphs
-county_df_melt  <- melt(county_df,id.vars = c('time','county_id',
-                                               'true_deforestation_probability','true_reforestation_probability','true_misclassification_probability_1','true_misclassification_probability_2','true_mu1','x','fixed_effect','simID','fileID'))
+id_vars <- c('time', 'county_id',
+             'true_deforestation_probability','true_reforestation_probability',
+             'true_misclassification_probability_1','true_misclassification_probability_2',
+             'true_mu1','x','simID','fileID')
+county_df_melt  <- melt(county_df,id.vars = id_vars)
 
 county_df_melt  <- merge(county_df_melt, iterDat)
 
@@ -210,7 +212,7 @@ mseFunc <- function(trueVal,keyword){
 }
 
 
-nVec <- c(100,500,1000)
+nVec <- c(100,500,1000, 10000)
 
 colsT <- iterDat[n_points_per_county %in% nVec & n_counties == 100  & mu1==90 & defRt1==4&defRtMid==10 & defRtLast==20 & prY11==90 & prY22==80 & n_points_per_county == 1000]
 colsMrgT <- colsT[,list(simID,fileID,nPts = n_points_per_county)]
@@ -265,26 +267,3 @@ for(j in 1:length(matVec)){
 }
 cat('\\end{tabular}')
 sink()
-
-
-## cat('&Bias &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                        function(e) outFunc(miscPr2Dat,n,e,'bias')),collapse='&')),collapse='&'),'\\\\\n')
-## cat('$\\Upsilon(2,1)=.2$& s.d. &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                                            function(e) outFunc(miscPr2Dat,n,e,'sd')),collapse='&')),collapse='&'),'\\\\\n')
-## cat('&RMSE &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                        function(e) outFunc(miscPr2Dat,n,e,'rmse')),collapse='&')),collapse='&'),'\\\\\n')
-## cat('\\\\\\\\')
-## cat('&Bias &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                        function(e) outFunc(defForestPrDat,n,e,'bias',1)),collapse='&')),collapse='&'),'\\\\\n')
-## cat('$P_{1}(1,2)=.04$& s.d. &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                                            function(e) outFunc(defForestPrDat,n,e,'sd',1)),collapse='&')),collapse='&'),'\\\\\n')
-## cat('&RMSE &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                        function(e) outFunc(defForestPrDat,n,e,'rmse',1)),collapse='&')),collapse='&'),'\\\\\n')
-## cat('\\\\\\\\')
-## cat('&Bias &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                        function(e) outFunc(defForestPrDat,n,e,'bias',1)),collapse='&')),collapse='&'),'\\\\\n')
-## cat('$P_{1}(2,1)=.02$& s.d. &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                                            function(e) outFunc(defForestPrDat,n,e,'sd',1)),collapse='&')),collapse='&'),'\\\\\n')
-## cat('&RMSE &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-##                                                                        function(e) outFunc(defForestPrDat,n,e,'rmse',1)),collapse='&')),collapse='&'),'\\\\\n')
-                       
