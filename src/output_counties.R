@@ -84,7 +84,7 @@ for (f in seq_len(length(fileReadVec))){
 }
 
 ##colors for graph
-graphCol  <- setNames(c('green','blue','purple'),c('Frequency','MD','EM'))
+graphCol  <- setNames(c('green','blue','purple'), c('Freq','MD','EM'))
 
 ##Make Graphs
 id_vars <- c('time', 'county_id',
@@ -108,7 +108,12 @@ county_df_melt[,n_points_per_county_disp := factor(paste0("'N=",n_points_per_cou
 
 county_df_melt[variable %like% '_em', estimTypDisp := 'EM']
 county_df_melt[variable %like% '_md', estimTypDisp := 'MD']
-county_df_melt[variable %like% '_naive', estimTypDisp := 'Frequency']
+county_df_melt[variable %like% '_naive', estimTypDisp := 'Freq']
+
+## Note: the order of the factor levels controls the order along the x-axis in several of the graphs
+county_df_melt[, estimTypDisp := factor(estimTypDisp, levels=c("Freq", "EM", "MD"))]
+
+
 ##Graphs
 plt <- ggplot(county_df_melt[ n_time_periods == 4 & prY11 == 90 & defRtLast == 20 & variable %like% 'deforestation_probability'], aes( y=value, x = estimTypDisp, group=variable)) +
     geom_boxplot() +
