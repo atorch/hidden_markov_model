@@ -104,8 +104,8 @@ county_df_melt[ prY11 == 90 & n_time_periods == 4 & time == 3 & defRtLast == 20 
                                                                   N = .N),
                by = list(true_deforestation_probability,variable)]
 
-n_points_per_county_disp_levels <- paste0("'N=", format(sort(unique(county_df_melt$n_points_per_county)), big.mark=",",scientific=FALSE), " Points'")
-county_df_melt[, n_points_per_county_disp := factor(paste0("'N=", format(n_points_per_county, big.mark=",",scientific=FALSE), " Points'"),
+n_points_per_county_disp_levels <- paste0("'N=", str_trim(format(sort(unique(county_df_melt$n_points_per_county)), big.mark=",",scientific=FALSE)), " Points'")
+county_df_melt[, n_points_per_county_disp := factor(paste0("'N=", str_trim(format(n_points_per_county, big.mark=",",scientific=FALSE)), " Points'"),
                                                     levels=n_points_per_county_disp_levels)]
 
 county_df_melt[variable %like% '_em', estimTypDisp := 'EM']
