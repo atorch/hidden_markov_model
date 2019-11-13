@@ -12,15 +12,15 @@ set.seed(789)
 
 # Binary for {crops, pasture}, ternary for {soy, other crops, pasture}
 opt_list <- list(make_option("--landuse_set", default="binary"),
-                 make_option("--panel_length", default="long"))
+                 make_option("--panel_length", default="short"),
+                 make_option("--classifier_training_fraction", default=0.30, type="double"),
+                 make_option("--classifier_pasture_fraction", default=0.25, type="double"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
+
 stopifnot(opt$landuse_set %in% c("binary", "ternary"))
 stopifnot(opt$panel_length %in% c("long", "short"))
-
-# TODO Should we experiment with a smaller GBM training set and larger HMM validation set?
-training_fraction <- 0.50
-stopifnot(0 < training_fraction && training_fraction < 1)
+stopifnot(0 < opt$classifier_training_fraction && opt$classifier_training_fraction < 1)
 
 source("embrapa_validation_landuse_mapping.R")
 source("hmm_functions.R")
@@ -57,9 +57,30 @@ message("keeping ", nrow(points), " point-years, ", length(unique(points$point_i
 point_id_ever_mata <- unique(points$point_id[!is.na(points$validation_landuse) & tolower(points$validation_landuse) == "mata"])
 point_id_ever_reflorestamento <- unique(points$point_id[!is.na(points$validation_landuse) & tolower(points$validation_landuse) == "reflorestamento"])
 points <- subset(points, !point_id %in% c(point_id_ever_mata, point_id_ever_reflorestamento))  # Down to 403 points
-message("keeping ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points")
+message("keeping ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points after removing points whose validation landuse was ever mata or reflorestamento")
 
-point_id_train <- sample(unique(points$point_id), size=floor(training_fraction * length(unique(points$point_id))))
+message("running validation exercise with ", opt$landuse_set, " land use set S")
+if(opt$landuse_set == "binary") {
+    map_landuse_to_S <- map_landuse_to_S_binary
+    points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
+    stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("crops", "pasture")))
+} else {
+    map_landuse_to_S <- map_landuse_to_S_ternary
+    points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
+    stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("soy", "non-soy crops", "pasture")))
+}
+
+table(points$validation_landuse_coarse)  # Careful, pasture is rare
+points$validation_landuse_coarse <- factor(points$validation_landuse_coarse)  # Factor for randomForest classification
+
+## Note: pasture would be very rare in the training set if we took a simple random sample,
+## so we stratify in order to over-sample pasture
+n_point_id_train <- floor(opt$classifier_training_fraction * length(unique(points$point_id)))
+subset_pasture <- subset(points, validation_landuse_coarse == "pasture")
+point_id_train_pasture <- sample(unique(subset_pasture$point_id), size=n_point_id_train * opt$classifier_pasture_fraction)
+point_id_train <- c(point_id_train_pasture, sample(subset(points, !point_id %in% point_id_train_pasture)$point_id, size=n_point_id_train - length(point_id_train_pasture)))
+
+message("training ML model (classifier) on ", length(point_id_train), " points")
 
 ## MODIS variables
 evi_vars <- sprintf("evi_%s", seq(1, 23))
@@ -72,12 +93,6 @@ stopifnot(all(nir_vars %in% names(points)))
 stopifnot(all(mir_vars %in% names(points)))
 stopifnot(all(red_vars %in% names(points)))
 stopifnot(all(blue_vars %in% names(points)))
-
-rf_test_confusion <- list()
-gbm_test_confusion <- list()
-pr_transition <- list()
-pr_transition_predictions <- list()
-hmm_params_hat <- list()
 
 get_initial_hmm_params <- function(landuse_set) {
     if(landuse_set == "binary") {
@@ -120,62 +135,30 @@ get_initial_hmm_params <- function(landuse_set) {
     return(initial_hmm_params)
 }
 
-message("running validation exercise with ", opt$landuse_set, " land use set S")
-if(opt$landuse_set == "binary") {
-    map_landuse_to_S <- map_landuse_to_S_binary
-    points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
-    stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("crops", "pasture")))
-} else {
-    map_landuse_to_S <- map_landuse_to_S_ternary
-    points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
-    stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("soy", "non-soy crops", "pasture")))
-}
-
-table(points$validation_landuse_coarse)  # Careful, pasture is rare
-points$validation_landuse_coarse <- factor(points$validation_landuse_coarse)  # Factor for randomForest classification
-
 points_train <- subset(points, point_id %in% point_id_train)
 points_test <- subset(points, !point_id %in% point_id_train)
+
 table(points_train$validation_landuse_coarse)  # Careful, pasture is rare -- should make sure that training set is not 100% crops, same for test
 table(points_test$validation_landuse_coarse)  # Similar comment about non-soy crops in ternary case
 
 predictors <- c(evi_vars, nir_vars, mir_vars, red_vars, blue_vars)
 model_formula <- reformulate(termlabels=predictors, response="validation_landuse_coarse")
 
-model_rf <- randomForest(formula=model_formula, ntree=1000, nodesize=1, do.trace=TRUE,
-                         mtry=floor(sqrt(length(predictors))), na.action=na.omit, data=points_train)
-model_rf$confusion  # Large OOB error rate for pasture -- non-soy crops even worse in ternary case
+## Fit GBM (tried random forest but confusion matrix was generally not diagonally dominant, which violates the HMM assumptions)
+model_gbm <- gbm(formula=model_formula, distribution="multinomial",  # Does this have to be bernoulli for two-class case?
+                 data=subset(points, !is.na(validation_landuse_coarse)), n.trees=6000, interaction.depth=4, shrinkage=0.001, cv.folds=3)
 
-points_test$landuse_predicted_rf <- predict(model_rf, type="response", newdata=points_test)
-mean(is.na(points_test$landuse_predicted_rf))  # Around 0.11 -- missing when MODIS variables are NA
-table(points_test$landuse_predicted_rf)
-table(points_test$validation_landuse_coarse, points_test$landuse_predicted_rf)  # RF test confusion matrix, compare to OOB
-
-## Fit GBM, see whether it beats RF -- takes around 10 minutes to fit
-## GBM appears to beat RF for rare landuse in both binary and ternary case
-gbm_filename <- sprintf("~/Dropbox/amazon_hmm_shared/data/gbm_model_for_embrapa_validation_%s_landuse_set_%s.rds",
-                        opt$landuse_set, digest(points_train, algo="crc32"))
-if(file.exists(gbm_filename)) {
-    model_gbm <- readRDS(gbm_filename)
-} else {
-    model_gbm <- gbm(formula=model_formula, distribution="multinomial",  # Does this have to be bernoulli for two-class case?
-                     data=subset(points, !is.na(validation_landuse_coarse)), n.trees=6500, interaction.depth=4, shrinkage=0.001, cv.folds=3)
-    saveRDS(model_gbm, file=gbm_filename)  # Takes a while to fit -- save and reuse on future runs
-}
 ntrees_star <- gbm.perf(model_gbm, method="cv")  # Plot shows training and CV deviance as function of number of trees -- selects around 5000-6000 trees
 message("GBM uses ", ntrees_star, " trees (tuning parameter selected by cross-validation)")
 
 gbm_predictions <- predict(model_gbm, type="response", newdata=points_test, ntrees=ntrees_star)  # Outputs class probabilities
 points_test$landuse_predicted_gbm <- colnames(gbm_predictions)[as.integer(apply(gbm_predictions, 1, which.max))]
-mean(is.na(points_test$landuse_predicted_gbm))  # Zero (i.e. no missing predictions), unlike RF
-table(points_test$landuse_predicted_gbm)
-table(points_test$validation_landuse_coarse, points_test$landuse_predicted_gbm)  # GBM test confusion matrix, compare to RF
-table(points_test$landuse_predicted_gbm, points_test$landuse_predicted_rf)  # GBM versus RF predictions
+mean(is.na(points_test$landuse_predicted_gbm))  # Zero (i.e. no missing predictions), unlike random forest
 
-rf_test_confusion[[opt$landuse_set]] <- table(points_test$validation_landuse_coarse, points_test$landuse_predicted_rf)
+table(points_test$landuse_predicted_gbm)
 
 ## Careful, not diagonally dominant in ternary case (see non-soy crops entry), expect HMM to perform poorly
-gbm_test_confusion[[opt$landuse_set]] <- table(points_test$validation_landuse_coarse, points_test$landuse_predicted_gbm)
+gbm_test_confusion <- table(points_test$validation_landuse_coarse, points_test$landuse_predicted_gbm)
 
 ## Use GBM for predicted land use
 points_test$landuse_predicted <- factor(points_test$landuse_predicted_gbm)
@@ -189,10 +172,10 @@ dtable[, landuse_predicted_two_periods_ahead := c(tail(as.character(landuse_pred
 dtable[, landuse_predicted_two_periods_ahead := factor(landuse_predicted_two_periods_ahead, levels=levels(landuse_predicted))]
 head(subset(dtable, select=c("year", "point_id", "validation_landuse_coarse", "validation_landuse_coarse_next")), 30)  # Sanity check
 
-pr_transition[[opt$landuse_set]] <- with(dtable, prop.table(table(validation_landuse_coarse, validation_landuse_coarse_next), 1))
-pr_transition_predictions[[opt$landuse_set]] <- with(dtable, prop.table(table(landuse_predicted, landuse_predicted_next), 1))
-message("pr_transition: ", paste(round(pr_transition[[opt$landuse_set]], 3), collapse=" "))
-message("pr_transition_predictions: ", paste(round(pr_transition_predictions[[opt$landuse_set]], 3), collapse=" "))
+pr_transition <- with(dtable, prop.table(table(validation_landuse_coarse, validation_landuse_coarse_next), 1))
+pr_transition_predictions <- with(dtable, prop.table(table(landuse_predicted, landuse_predicted_next), 1))
+message("pr_transition: ", paste(round(pr_transition, 3), collapse=" "))
+message("pr_transition_predictions: ", paste(round(pr_transition_predictions, 3), collapse=" "))
 
 list_of_initial_hmm_params <- get_initial_hmm_params(opt$landuse_set)
 
@@ -203,13 +186,13 @@ list_of_hmm_params_hat <- lapply(list_of_initial_hmm_params, function(initial_hm
     return(em_parameter_estimates_time_homogeneous(panel=panel, params=initial_hmm_params, max_iter=50, epsilon=0.001))
 })
 
-hmm_params_hat[[opt$landuse_set]] <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
-hmm_params_hat[[opt$landuse_set]]$P  # Compare to pr_transition, pr_transition_predictions
-hmm_params_hat[[opt$landuse_set]]$pr_y  # Compare to with(points_test, prop.table(table(validation_landuse_coarse, landuse_predicted), margin=1))
-message("hmm_params_hat$P: ", paste(round(hmm_params_hat[[opt$landuse_set]]$P, 3), collapse=" "))
+hmm_params_hat <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
+hmm_params_hat$P  # Compare to pr_transition, pr_transition_predictions
+hmm_params_hat$pr_y  # Compare to with(points_test, prop.table(table(validation_landuse_coarse, landuse_predicted), margin=1))
+message("hmm_params_hat$P: ", paste(round(hmm_params_hat$P, 3), collapse=" "))
 
 ## Run Viterbi and see whether test performance beats raw GBM
-viterbi_paths <- lapply(panel, viterbi_path_time_homogeneous, params=hmm_params_hat[[opt$landuse_set]])
+viterbi_paths <- lapply(panel, viterbi_path_time_homogeneous, params=hmm_params_hat)
 dtable$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recursive=TRUE)]
 viterbi_test_confusion <- table(dtable$validation_landuse_coarse, dtable$viterbi_landuse)  # Compare to gbm_test_confusion
 
@@ -246,14 +229,9 @@ run_bootstrap <- function() {
 n_boostrap_samples <- 100
 boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications_%s.rds",
                           opt$panel_length, opt$landuse_set, n_boostrap_samples, digest(points_train, algo="crc32"))
-if(file.exists(boots_filename)) {
-    message("loading ", boots_filename)
-    boots <- readRDS(boots_filename)
-} else {
-    message("did not find ", boots_filename, "; running now; time is ", Sys.time())
-    boots <- replicate(n_boostrap_samples, run_bootstrap(), simplify=FALSE)  # TODO Slow, check whether saved file exists; if so, don't re-run
-    saveRDS(boots, file=boots_filename)
-}
+
+boots <- replicate(n_boostrap_samples, run_bootstrap(), simplify=FALSE)
+saveRDS(boots, file=boots_filename)
 
 df_boots <- data.frame(replication_index=seq_along(boots))
 landuses <- unique(dtable$landuse_predicted_gbm)
@@ -302,3 +280,24 @@ outfile <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications
                    opt$panel_length, opt$landuse_set, n_boostrap_samples)
 message("saving ", outfile)
 write.csv(df_boots, file=outfile, row.names=FALSE)
+
+message("mean ground truth Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$pr_crops_crops))
+message("mean ground truth Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$pr_pasture_pasture))
+
+message("mean HMM Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$hmm_pr_crops_crops))
+message("mean HMM Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$hmm_pr_pasture_pasture))
+
+message("mean Y_it frequency estimate Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$predictions_pr_crops_crops))
+message("mean Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$predictions_pr_pasture_pasture))
+
+rmse_frequency_pr_pasture_pasture <- with(df_boots, sqrt(mean((predictions_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
+rmse_hmm_pr_pasture_pasture <- with(df_boots, sqrt(mean((hmm_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
+message("RMSEs for Pr[S_it+1 = pasture | S_it = pasture]: HMM ", rmse_hmm_pr_pasture_pasture, ", frequency estimator ", rmse_frequency_pr_pasture_pasture)
+
+rmse_frequency_pr_crops_crops <- with(df_boots, sqrt(mean((predictions_pr_crops_crops - pr_crops_crops) ^ 2)))
+rmse_hmm_pr_crops_crops <- with(df_boots, sqrt(mean((hmm_pr_crops_crops - pr_crops_crops) ^ 2)))
+message("RMSEs for Pr[S_it+1 = crops | S_it = crops]: HMM ", rmse_hmm_pr_crops_crops, ", frequency estimator ", rmse_frequency_pr_crops_crops)
+
+rmse_hmm_miclassification_crops <- with(df_boots, sqrt(mean((hmm_misclassification_crops - test_error_crops) ^ 2)))
+rmse_hmm_miclassification_pasture <- with(df_boots, sqrt(mean((hmm_misclassification_pasture - test_error_pasture) ^ 2)))
+message("RMSEs for HMM estimates of misclassification probabilities (i.e. Pr[Y_it | S_it]): crops ", rmse_hmm_miclassification_crops, ", pasture ", rmse_hmm_miclassification_pasture)
