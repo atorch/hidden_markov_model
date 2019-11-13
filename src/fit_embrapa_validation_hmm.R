@@ -13,8 +13,8 @@ set.seed(789)
 # Binary for {crops, pasture}, ternary for {soy, other crops, pasture}
 opt_list <- list(make_option("--landuse_set", default="binary"),
                  make_option("--panel_length", default="short"),
-                 make_option("--classifier_training_fraction", default=0.30, type="double"),
-                 make_option("--classifier_pasture_fraction", default=0.25, type="double"))
+                 make_option("--classifier_training_fraction", default=0.1, type="double"),
+                 make_option("--classifier_pasture_fraction", default=0.6, type="double"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
@@ -145,8 +145,9 @@ predictors <- c(evi_vars, nir_vars, mir_vars, red_vars, blue_vars)
 model_formula <- reformulate(termlabels=predictors, response="validation_landuse_coarse")
 
 ## Fit GBM (tried random forest but confusion matrix was generally not diagonally dominant, which violates the HMM assumptions)
+gbm_training_set <- subset(points_train, !is.na(validation_landuse_coarse))
 model_gbm <- gbm(formula=model_formula, distribution="multinomial",  # Does this have to be bernoulli for two-class case?
-                 data=subset(points, !is.na(validation_landuse_coarse)), n.trees=6000, interaction.depth=4, shrinkage=0.001, cv.folds=3)
+                 data=gbm_training_set, n.trees=5000, interaction.depth=4, shrinkage=0.001, cv.folds=3)
 
 ntrees_star <- gbm.perf(model_gbm, method="cv")  # Plot shows training and CV deviance as function of number of trees -- selects around 5000-6000 trees
 message("GBM uses ", ntrees_star, " trees (tuning parameter selected by cross-validation)")
@@ -301,3 +302,6 @@ message("RMSEs for Pr[S_it+1 = crops | S_it = crops]: HMM ", rmse_hmm_pr_crops_c
 rmse_hmm_miclassification_crops <- with(df_boots, sqrt(mean((hmm_misclassification_crops - test_error_crops) ^ 2)))
 rmse_hmm_miclassification_pasture <- with(df_boots, sqrt(mean((hmm_misclassification_pasture - test_error_pasture) ^ 2)))
 message("RMSEs for HMM estimates of misclassification probabilities (i.e. Pr[Y_it | S_it]): crops ", rmse_hmm_miclassification_crops, ", pasture ", rmse_hmm_miclassification_pasture)
+
+message("GBM test set confusion matrix:")
+gbm_test_confusion
