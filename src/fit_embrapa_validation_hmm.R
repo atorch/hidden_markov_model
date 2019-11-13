@@ -80,8 +80,6 @@ subset_pasture <- subset(points, validation_landuse_coarse == "pasture")
 point_id_train_pasture <- sample(unique(subset_pasture$point_id), size=n_point_id_train * opt$classifier_pasture_fraction)
 point_id_train <- c(point_id_train_pasture, sample(subset(points, !point_id %in% point_id_train_pasture)$point_id, size=n_point_id_train - length(point_id_train_pasture)))
 
-message("training ML model (classifier) on ", length(point_id_train), " points")
-
 ## MODIS variables
 evi_vars <- sprintf("evi_%s", seq(1, 23))
 nir_vars <- sprintf("nir_%s", seq(1, 23))
@@ -146,6 +144,7 @@ model_formula <- reformulate(termlabels=predictors, response="validation_landuse
 
 ## Fit GBM (tried random forest but confusion matrix was generally not diagonally dominant, which violates the HMM assumptions)
 gbm_training_set <- subset(points_train, !is.na(validation_landuse_coarse))
+message("training ML model (GBM classifier) on ", length(unique(gbm_training_set$point_id)), " points")
 model_gbm <- gbm(formula=model_formula, distribution="multinomial",  # Does this have to be bernoulli for two-class case?
                  data=gbm_training_set, n.trees=5000, interaction.depth=4, shrinkage=0.001, cv.folds=3)
 
