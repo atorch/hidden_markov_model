@@ -284,11 +284,20 @@ write.csv(df_boots, file=outfile, row.names=FALSE)
 message("mean ground truth Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$pr_crops_crops))
 message("mean ground truth Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$pr_pasture_pasture))
 
+message("sd ground truth Pr[S_it+1 = crops | S_it = crops] in boots: ", sd(df_boots$pr_crops_crops))
+message("sd ground truth Pr[S_it+1 = pasture | S_it = pasture] in boots: ", sd(df_boots$pr_pasture_pasture))
+
 message("mean HMM Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$hmm_pr_crops_crops))
 message("mean HMM Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$hmm_pr_pasture_pasture))
 
+message("sd HMM Pr[S_it+1 = crops | S_it = crops] in boots: ", sd(df_boots$hmm_pr_crops_crops))
+message("sd HMM Pr[S_it+1 = pasture | S_it = pasture] in boots: ", sd(df_boots$hmm_pr_pasture_pasture))
+
 message("mean Y_it frequency estimate Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$predictions_pr_crops_crops))
 message("mean Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$predictions_pr_pasture_pasture))
+
+message("sd Y_it frequency estimate Pr[S_it+1 = crops | S_it = crops] in boots: ", sd(df_boots$predictions_pr_crops_crops))
+message("sd Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in boots: ", sd(df_boots$predictions_pr_pasture_pasture))
 
 rmse_frequency_pr_pasture_pasture <- with(df_boots, sqrt(mean((predictions_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
 rmse_hmm_pr_pasture_pasture <- with(df_boots, sqrt(mean((hmm_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
