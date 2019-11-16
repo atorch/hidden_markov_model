@@ -130,7 +130,7 @@ M_S_joint_incorrect <- lapply(seq_along(params1$P_list), function(time_index) {
 })
 
 ## Minimum distance estimation starting from incorrect parameters
-min_dist_params2_hat <- get_min_distance_estimates(params1, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
+min_dist_params2_hat <- get_min_distance_estimates(params2, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 min_dist_params1_hat <- get_min_distance_estimates(params1, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
 
 ## Minimum distance estimation starting from correct parameters
@@ -143,9 +143,11 @@ max(abs(c(min_dist_params0_hat$P_list, recursive=TRUE) - c(min_dist_params1_hat$
 ## Compare minimum distance estimates to true parameters (distances should be small)
 max(abs(params0$pr_y - min_dist_params1_hat$pr_y))
 max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params1_hat$P_list, recursive=TRUE)))
+max(abs(params0$mu - min_dist_params1_hat$mu))
 
 max(abs(params0$pr_y - min_dist_params2_hat$pr_y))
 max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params2_hat$P_list, recursive=TRUE)))
+max(abs(params0$mu - min_dist_params2_hat$mu))
 
 
 ## Check that minimum distance estimation returns correct parameter values when using population values for the distribution of Y_t
@@ -186,3 +188,6 @@ min_dist_params2_hat_population$objfn_values
 
 ## This distance should be zero also when starting optimization from params2
 max(abs(c(min_dist_params2_hat_population$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))
+
+## Recover the initial distribution
+min_dist_params2_hat_population$mu - params0$mu

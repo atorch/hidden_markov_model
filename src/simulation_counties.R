@@ -5,25 +5,23 @@ library(parallel)
 source("hmm_functions.R")
 
 
-simulation_df <- data.frame(n_points_per_county=c(100, 500, rep(1000,13)),
-                            n_counties=c(rep(100,15)),
-                            n_time_periods=c( rep(4, 10),5,6,rep(4,3)),
-                            n_components = c(rep(2, 15)),
-                            mu1 = c(rep(90,15)), ##Put in as percent
-                            defRt1 = c(rep(4,15)), ##In as percent
-                            defRtMid = c(rep(10,15)), ##same
-                            defRtLast = c(20, 20, seq(5,40,by=5),rep(20,5)),
-                            prY11 = c(rep(90,12),75,80,95), ##Correct classification Probability 1,1 in matrix
-                            prY22 = c(rep(80,15))) ##Correct classification Probability 2,2 in matrix
+## TODO "n_counties" should really be "n_replications", since we're no longer running county regressions
+## This simulation_counties.R code overlaps with simulation_sampling_distribution.R
+simulation_df <- data.frame(n_points_per_county=c(100, 500, rep(1000, 13), 10000),
+                            n_counties=c(rep(100, 16)),
+                            n_time_periods=c(rep(4, 10), 5, 6, rep(4,3), 4),
+                            n_components = c(rep(2, 16)),
+                            mu1 = c(rep(90, 16)), ## Put in as percent
+                            defRt1 = c(rep(4, 16)), ## In as percent
+                            defRtMid = c(rep(10, 16)), ## Percent
+                            defRtLast = c(20, 20, seq(5, 40, by=5), rep(20, 6)),
+                            prY11 = c(rep(90, 12), 75, 80, 95, 90), ## Correct classification Probability 1,1 in matrix
+                            prY22 = c(rep(80, 16))) ## Correct classification Probability 2,2 in matrix
 
 
 max_cores <- 4
 set.seed(998877)
 
-##Generate matrix of simulation values (constant across all simulations)
-maxNCount  <- max(simulation_df$n_counties)
-maxT <- max(simulation_df$n_time_periods)
-feVec  <- vector(mode='numeric',length = maxNCount)*0
 
 ##Set output files for simulation
 county_outfile_format <- paste0("county_simulation_",Sys.time(),"_iter_%s.rds")
@@ -33,40 +31,13 @@ iter_desc_outfile <- paste0("county_simulation_",Sys.time(),"_Desc.csv")
 fwrite(simulation_df,file = iter_desc_outfile)
 
 
-## Keep track of the estimates from the county regression
-simulation_df$county_regression_naive_beta_hat <- NA
-simulation_df$county_regression_naive_beta_hat_std_err <- NA
-simulation_df$county_regression_em_beta_hat <- NA
-simulation_df$county_regression_em_beta_hat_std_err <- NA
-simulation_df$county_regression_md_beta_hat <- NA
-simulation_df$county_regression_md_beta_hat_std_err <- NA
-
-#regression_summary_outfile_format <- "county_simulation_regressions_%s_points_%s_counties.tex"
-#simulation_df_outfile <- "county_simulations_summary.tex"
-
-
-
-
-get_deforestation_probability <- function(x, county_fixed_effect) {
-
-    return(x)
-
-}
-
-# TODO Make sure the distribution of county_X and county_fixed_effect leads to somewhat realistic deforestation probabilities
-#curve(get_deforestation_probability(x, county_fixed_effect=1), from=-2, to=2)
-#curve(get_deforestation_probability(x, county_fixed_effect=0), from=-2, to=2, lty=2, col="red", add=TRUE)
-
-get_P_list <- function(county_fixed_effect, county_X) {
+get_P_list <- function(deforestation_rates) {
 
     ## Returns a list of hidden state transition probabilities
-    P_list <- lapply(county_X, function(x) {
+    P_list <- lapply(deforestation_rates, function(deforestation_rate) {
 
-        deforestation <- get_deforestation_probability(x, county_fixed_effect)
-
-        ## Note: the reforestation rate is constant across time and counties for now
-        ## (second row of the transition probability matrix is fixed)
-        P <- rbind(c(1 - deforestation, deforestation),
+        ## Note: the reforestation rate (second row of the transition probability matrix) is fixed
+        P <- rbind(c(1 - deforestation_rate, deforestation_rate),
                    c(0.02, 0.98))
 
         return(P)
@@ -77,7 +48,7 @@ get_P_list <- function(county_fixed_effect, county_X) {
 
 
 
-simulate_single_county <- function(county_id, n_time_periods, n_points_per_county,n_components, mu1, prY11,prY22, county_fixed_effect, county_X) {
+simulate_single_county <- function(county_id, n_time_periods, n_points_per_county,n_components, mu1, prY11,prY22, deforestation_rates) {
 
     message(" simulating county_id ", county_id)
 
@@ -92,7 +63,7 @@ simulate_single_county <- function(county_id, n_time_periods, n_points_per_count
     pr_y <- rbind(c(prY11, 1-prY11),
                   c(1-prY22, prY22))
 
-    P_list <- get_P_list(county_fixed_effect, county_X)
+    P_list <- get_P_list(deforestation_rates)
 
     county_params$P_list <- P_list
     county_params$pr_y <- pr_y
@@ -104,8 +75,7 @@ simulate_single_county <- function(county_id, n_time_periods, n_points_per_count
     return(list(simulation=county_simulation,
                 estimates=estimates,
                 params=county_params,
-                fixed_effect=county_fixed_effect,
-                X=county_X,
+                deforestation_rates=deforestation_rates,
                 id=county_id))
 }
 
@@ -122,10 +92,9 @@ for (i in seq_len(nrow(simulation_df))) {
     mu1 <- simulation_df$mu1[i]/100
     prY11  <- simulation_df$prY11[i]/100
     prY22  <- simulation_df$prY22[i]/100
-    xVec  <- c(simulation_df$defRt1[i]/100,
-               rep(simulation_df$defRtMid[i]/100,n_time_periods-3),
-               simulation_df$defRtLast[i]/100)
-               
+    deforestation_rates  <- c(simulation_df$defRt1[i]/100,
+                              rep(simulation_df$defRtMid[i]/100, n_time_periods-3),
+                              simulation_df$defRtLast[i]/100)
 
     message("Running simulation with n_counties=", n_counties, " n_points_per_county=", n_points_per_county, " n_time_periods=", n_time_periods)
 
@@ -134,90 +103,35 @@ for (i in seq_len(nrow(simulation_df))) {
                              "eq_function_minimum_distance",
                              "get_P_list",
                              "get_deforestation_prob_from_P",
-                             "get_deforestation_probability",
                              "get_expectation_minimization_estimates",
                              "get_hmm_and_minimum_distance_estimates_random_initialization",
                              "get_min_distance_estimates",
                              "get_random_initial_parameters",
                              "get_transition_probs_from_M_S_joint",
+                             "is_diag_dominant",
+                             "mu1",
+                             "n_components",
                              "n_points_per_county",
                              "n_time_periods",
-                             "n_components",
-                             "mu1",
                              "prY11",
                              "prY22",
-                             "feVec",
-                             "xVec",
+                             "deforestation_rates",
                              "objfn_minimum_distance",
                              "simulate_discrete_markov",
                              "simulate_hmm",
                              "simulate_single_county",
                              "valid_panel_element",
                              "valid_parameters"))
-
-    ## counties <- lapply(seq_len(n_counties), function(n) {
-    ##     simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county,
-    ##                            n_components = n_components,mu1 = mu1, prY11 = prY11, prY22 = prY22,
-    ##                            county_fixed_effect = feVec[n], county_X = xVec)
-
     
     counties <- parLapply(cluster, seq_len(n_counties), function(n) {
         simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points_per_county=n_points_per_county,
                                n_components = n_components,mu1 = mu1, prY11 = prY11, prY22 = prY22,
-                               county_fixed_effect = feVec[n], county_X = xVec)
+                               deforestation_rates = deforestation_rates)
     })
 
-    ## ##Debug
-    ## minDistMiscPr <- sapply(counties, function(x) x$estimates$min_dist_params_hat_best_objfn$pr_y[1,1])    
-    ## emMiscPr  <- sapply(counties, function(x) x$estimates$em_params_hat_best_likelihood$pr_y[1,1])
-    ## trueMiscPr  <- sapply(counties, function(x) x$params$pr_y[1,1])
-
-    ## mdErrMisc  <- mean(abs(minDistMiscPr-trueMiscPr))
-    ## emErrMisc  <- mean(abs(emMiscPr-trueMiscPr))
-    
-    ## mdErrMat  <- matrix(nrow=5,ncol=2)
-    ## emErrMat <- matrix(nrow = 5, ncol = 2)
-    ## mdWorseEmMat <- matrix(nrow = 5, ncol = 2)
-    ## for (ti in 1:5){
-    ##     for (ro in 1:2){
-    ##         minDistTransPr <- sapply(counties, function(x) x$estimates$min_dist_params_hat_best_objfn$P_list[[ti]][ro,1])    
-    ##         emTransPr  <- sapply(counties, function(x) x$estimates$em_params_hat_best_likelihood$P_list[[ti]][ro,1])
-    ##         trueTransPr  <- sapply(counties, function(x) x$params$P_list[[ti]][ro,1])
-    ##         mdErrMat[ti,ro]  <- mean(abs(minDistTransPr - trueTransPr))
-    ##         emErrMat[ti,ro]  <- mean(abs(emTransPr - trueTransPr))
-    ##         mdWorseEmMat[ti,ro]  <- mean(abs(minDistTransPr - trueTransPr) -
-    ##                                      abs(emTransPr - trueTransPr) > .01)
-    ##     }
-    ## }
-    
-
-    
-    ## county_dfs <- lapply(counties, get_data_table_summarizing_single_county_simulation)
-
-    ## county_df <- rbindlist(county_dfs)
-
-    ## ## Note: this sorts county_df first by county_id and then by time,
-    ## ## the sort order is necessary for computing first differences correctly
-    ## setkey(county_df, county_id, time)
-
-    ## county_df[, county_id_factor := factor(county_id)]
-    ## county_df[, y_true := log(true_deforestation_probability / (1 - true_deforestation_probability))]
-    ## county_df[, y_naive:= log(estimated_deforestation_probability_naive / (1 - estimated_deforestation_probability_naive))]
-    ## county_df[, y_em := log(estimated_deforestation_probability_em / (1 - estimated_deforestation_probability_em))]
-    ## county_df[, y_md := log(estimated_deforestation_probability_md / (1 - estimated_deforestation_probability_md))]
-
-    ## county_df[, x_first_diff := c(NA, diff(x)), by="county_id"]
-    ## county_df[, y_true_first_diff := c(NA, diff(y_true)), by="county_id"]
-    ## county_df[, y_naive_first_diff := c(NA, diff(y_naive)), by="county_id"]
-    ## county_df[, y_em_first_diff := c(NA, diff(y_em)), by="county_id"]
-    ## county_df[, y_md_first_diff := c(NA, diff(y_md)), by="county_id"]
-
-    ## Note: if you want to skip the simulation,
-    ## you can load county_df_outfile and run the regressions (lm) in the lines below
     county_outfile <- sprintf(county_outfile_format, i)
     message("Saving ", county_outfile)
     saveRDS(counties, file = county_outfile)
 }
-
 
 stopCluster(cluster)
