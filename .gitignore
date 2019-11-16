@@ -113,4 +113,6 @@ plots/*
 *.rds
 *.Rhistory
 
+#notes_tr.txt#
+
 Rplots.pdf

@@ -1,3 +1,13 @@
+get_deforestation_prob_from_P <- function(P) {
+    ## Note: this assumes we have 2 hidden states, and state 1 is forest
+    return(P[1, 2])
+}
+
+get_reforestation_prob_from_P <- function(P) {
+    ## Note: this assumes we have 2 hidden states, and state 1 is forest
+    return(P[2, 1])
+}
+
 get_random_initial_parameters <- function(params0) {
 
     ## Given a true set of HMM parameters, return random incorrect parameters from which to begin parameter estimation
@@ -9,7 +19,7 @@ get_random_initial_parameters <- function(params0) {
         ## Probabilities on diagonals of the transition probability matrices
         ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
         ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$P_list?
-        random_uniform <- runif(params0$n_components, min=0.70, max=0.98)
+        random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
 
         P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
         diag(P) <- random_uniform
@@ -18,16 +28,18 @@ get_random_initial_parameters <- function(params0) {
     })
 
     ## Probabilities on the diagonals of the observation probability matrix pr_y
-    ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
-    ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$pr_y? 
-    random_uniform <- runif(params0$n_components, min=0.70, max=0.98)
+    random_uniform <- runif(params0$n_components, min=0.6, max=0.98)
     initial_parameters$pr_y <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$pr_y), ncol=ncol(params0$pr_y))
     diag(initial_parameters$pr_y) <- random_uniform
 
-    ## The initial distribution over hidden states is set to its true value
-    initial_parameters$mu <- params0$mu
+    initial_parameters$mu <- runif(n=params0$n_components)
+    initial_parameters$mu <- initial_parameters$mu / sum(initial_parameters$mu)
 
     return(initial_parameters)
+}
+
+is_diag_dominant <- function(pr_y) {
+    return(all(diag(pr_y) > 0.5))
 }
 
 get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
@@ -50,11 +62,18 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
     n_equality_constraints <- n_components + 1 + n_components * (max(dtable$time) - 2)
 
+    ## Note: the lower bound for the diagonals of pr_y is 0.5 (to make pr_y diagonally dominant);
+    ## the lower bound for all other parameters is zero
+    ## The index using which(c(diag(initial_params$n_components)) > 0) assumes that the first params$n_components^2 elements
+    ## of the x_guess vector (i.e. the argument to objfn_minimum_distance) represent the observation probability matrix pr_y
+    lower_bound <- rep(0, length(x_guess))
+    lower_bound[which(c(diag(initial_params$n_components)) > 0)] = 0.5
+
     solnp_result <- solnp(x_guess,
                           fun=objfn_minimum_distance,
                           eqfun=eq_function_minimum_distance,
                           eqB=rep(0, n_equality_constraints),
-                          LB=rep(0, length(x_guess)),
+                          LB=lower_bound,
                           UB=rep(1, length(x_guess)),
                           M_Y_joint_hat_list=M_Y_joint_hat_list,
                           M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
@@ -66,13 +85,14 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
     M_Y_given_S_hat_solnp <- matrix(solnp_result$pars[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
     M_S_joint_list_hat_solnp <- lapply(seq_len(max_time - 1), function(time_index, n_components=initial_params$n_components) {
         return(matrix(solnp_result$pars[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
-    })
 
+    })
+    
     ## Note: we keep track of the objective function values so that we can pick the best MD estimate (lowest objfn_values)
-    ## TODO Also return estimates of initial distribution
     min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat_solnp),
                                 P_list=lapply(M_S_joint_list_hat_solnp, get_transition_probs_from_M_S_joint),
                                 convergence=solnp_result$convergence,
+                                mu=colSums(M_S_joint_list_hat_solnp[[1]]),
                                 objfn_values=solnp_result$values,
                                 x_guess=x_guess)
 
@@ -80,7 +100,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
 }
 
-get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, panel, n_random_starts=5) {
+get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, panel, n_random_starts=10) {
 
     ## Params0 are true HMM parameters used to generate data
 
@@ -124,21 +144,22 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
         })
     })
 
-    min_dist_params_hat_list <- lapply(random_initial_parameters,
-                                       get_min_distance_estimates,
-                                       M_Y_joint_hat_list=M_Y_joint_hat_list,
-                                       M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
-                                       M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
-                                       dtable=dtable)
+    min_dist_params_hat <- lapply(random_initial_parameters,
+                                  get_min_distance_estimates,
+                                  M_Y_joint_hat_list=M_Y_joint_hat_list,
+                                  M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
+                                  M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
+                                  dtable=dtable)
 
-    min_dist_objfn_values <- sapply(min_dist_params_hat_list, function(x) {
+    min_dist_objfn_values <- sapply(min_dist_params_hat, function(x) {
         return(min(x$objfn_values))
     })
 
-    ## TODO: the "best" min dist estimates are sometimes "stuck" at the wrong edge of the parameter space,
-    ## e.g. the estimated deforestation probabilities are 100% when the true rate is close to 0%
-    ## Check whether the estimated pr_y is diagonally dominant in these cases!
-    min_dist_params_hat_best_objfn <- min_dist_params_hat_list[[which.min(min_dist_objfn_values)]]
+    min_dist_params_hat_best_objfn <- min_dist_params_hat[[which.min(min_dist_objfn_values)]]
+
+    min_dist_pr_y_is_diag_dominant <- sapply(min_dist_params_hat, function(x) {
+        return(is_diag_dominant(x$pr_y))
+    })
 
     em_params_hat_best_likelihood <- em_params_hat_list[[which.max(em_likelihoods)]]
 
@@ -148,9 +169,10 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
                 "hmm_params_hat_loglikelihoods"=em_likelihoods,
                 "initial_parameters_list"=random_initial_parameters,
                 "em_params_hat_best_likelihood"=em_params_hat_best_likelihood,
-                "min_dist_params_hat_list"=min_dist_params_hat_list,
+                "min_dist_params_hat"=min_dist_params_hat,
                 "min_dist_objfn_values"=min_dist_objfn_values,
-                "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn))
+                "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
+                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant))
 }
 
 get_transition_probs_from_M_S_joint <- function(M_S_joint) {
@@ -180,6 +202,7 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
             return(candidate_D)
         })
     })
+    if(abs(candidate_M_Y_given_S[1,1]-candidate_M_Y_given_S[1,2])<0) message('Close to non diag dom')
     stopifnot(length(candidate_D_list) == length(M_fixed_y_Y_joint_hat_list))  # Careful, lists of lists
     stopifnot(length(candidate_D_list[[1]]) == length(M_fixed_y_Y_joint_hat_list[[1]]))  # Careful with fixed_y
     g1_vectors_for_fixed_y <- lapply(seq_along(candidate_D_list), function(fixed_y) {
@@ -246,7 +269,7 @@ valid_parameters <- function(params) {
     stopifnot("mu" %in% names(params))  # Vector of probabilities for intial distribution
     stopifnot(length(params$mu) == params$n_components)
     stopifnot(all(params$mu >= 0))
-    stopifnot(isTRUE(all.equal(sum(params$mu), 1.0)))  # Careful with float comparisons
+    stopifnot(isTRUE(abs(sum(params$mu)- 1.0)<1e-8))  # TR-- Changed away from Float compairson
     stopifnot(xor("P_list" %in% names(params),  # List of transition matrices for x (one per period)
                   "P" %in% names(params)))  # Time-invariant transition matrix
     stopifnot("pr_y" %in% names(params))  # Observation probabilities conditional on x
