@@ -12,9 +12,11 @@ set.seed(789)
 
 # Binary for {crops, pasture}, ternary for {soy, other crops, pasture}
 opt_list <- list(make_option("--landuse_set", default="binary"),
+                 make_option("--n_bootstrap_samples", default=100, type=("integer")),
                  make_option("--panel_length", default="short"),
-                 make_option("--classifier_training_fraction", default=0.1, type="double"),
-                 make_option("--classifier_pasture_fraction", default=0.6, type="double"))
+                 make_option("--classifier_training_fraction", default=0.15, type="double"),
+                 make_option("--classifier_pasture_fraction", default=0.6, type="double",
+                             help="This parameter is used to oversample pasture (to make the GBM training set more balanced)."))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
@@ -45,12 +47,14 @@ validation_years <- sort(unique(points$year[!is.na(points$validation_landuse)]))
 message("years with validation land use data: ", paste(validation_years, collapse=", "))
 
 if(opt$panel_length == "long") {
-    ## More precise HMM parameter estimates than short panel
+    ## Estimate HMM using "long" panel, i.e. including years for which we don't observe ground truth land cover
     points <- subset(points, year >= min(validation_years))
     
 } else {
+    ## Estimate HMM using only those years for which we observe ground truth land cover
     points <- subset(points, year %in% validation_years)
 }
+
 message("keeping the following years: ", paste(unique(points$year), collapse=", "))
 message("keeping ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points")
 
@@ -58,6 +62,11 @@ point_id_ever_mata <- unique(points$point_id[!is.na(points$validation_landuse) &
 point_id_ever_reflorestamento <- unique(points$point_id[!is.na(points$validation_landuse) & tolower(points$validation_landuse) == "reflorestamento"])
 points <- subset(points, !point_id %in% c(point_id_ever_mata, point_id_ever_reflorestamento))  # Down to 403 points
 message("keeping ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points after removing points whose validation landuse was ever mata or reflorestamento")
+
+message("number of point-years missing ground truth land use: ", sum(is.na(points$validation_landuse)))
+message("fraction of point-years missing ground truth land use: ", mean(is.na(points$validation_landuse)))
+
+message("number of unique points missing ground truth land use in one or more years: ", length(unique(points$point_id[is.na(points$validation_landuse)])))
 
 message("running validation exercise with ", opt$landuse_set, " land use set S")
 if(opt$landuse_set == "binary") {
@@ -71,10 +80,10 @@ if(opt$landuse_set == "binary") {
 }
 
 table(points$validation_landuse_coarse)  # Careful, pasture is rare
-points$validation_landuse_coarse <- factor(points$validation_landuse_coarse)  # Factor for randomForest classification
+points$validation_landuse_coarse <- factor(points$validation_landuse_coarse)  # Factor for classification
 
-## Note: pasture would be very rare in the training set if we took a simple random sample,
-## so we stratify in order to over-sample pasture
+## Note: pasture would be a small percentage of the training set if we took a simple random sample,
+## so we stratify in order to over-sample pasture for the GBM training set
 n_point_id_train <- floor(opt$classifier_training_fraction * length(unique(points$point_id)))
 subset_pasture <- subset(points, validation_landuse_coarse == "pasture")
 point_id_train_pasture <- sample(unique(subset_pasture$point_id), size=n_point_id_train * opt$classifier_pasture_fraction)
@@ -160,6 +169,8 @@ table(points_test$landuse_predicted_gbm)
 ## Careful, not diagonally dominant in ternary case (see non-soy crops entry), expect HMM to perform poorly
 gbm_test_confusion <- table(points_test$validation_landuse_coarse, points_test$landuse_predicted_gbm)
 
+message("GBM test set accuracy: ", mean(points_test$landuse_predicted_gbm == points_test$validation_landuse_coarse, na.rm=TRUE))
+
 ## Use GBM for predicted land use
 points_test$landuse_predicted <- factor(points_test$landuse_predicted_gbm)
 
@@ -177,6 +188,8 @@ pr_transition_predictions <- with(dtable, prop.table(table(landuse_predicted, la
 message("pr_transition: ", paste(round(pr_transition, 3), collapse=" "))
 message("pr_transition_predictions: ", paste(round(pr_transition_predictions, 3), collapse=" "))
 
+pr_Y_given_S <- with(points_test, prop.table(table(validation_landuse_coarse, landuse_predicted), margin=1))
+
 list_of_initial_hmm_params <- get_initial_hmm_params(opt$landuse_set)
 
 panel <- get_hmm_panel_from_points(dtable, discrete_y_varname="landuse_predicted")  # List of panel elements
@@ -188,7 +201,7 @@ list_of_hmm_params_hat <- lapply(list_of_initial_hmm_params, function(initial_hm
 
 hmm_params_hat <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
 hmm_params_hat$P  # Compare to pr_transition, pr_transition_predictions
-hmm_params_hat$pr_y  # Compare to with(points_test, prop.table(table(validation_landuse_coarse, landuse_predicted), margin=1))
+hmm_params_hat$pr_y  # Compare to pr_Y_given_S
 message("hmm_params_hat$P: ", paste(round(hmm_params_hat$P, 3), collapse=" "))
 
 ## Run Viterbi and see whether test performance beats raw GBM
@@ -226,11 +239,10 @@ run_bootstrap <- function() {
                 prediction_confusion_matrix=prediction_confusion_matrix))
 }
 
-n_boostrap_samples <- 100
 boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications_%s.rds",
-                          opt$panel_length, opt$landuse_set, n_boostrap_samples, digest(points_train, algo="crc32"))
+                          opt$panel_length, opt$landuse_set, opt$n_bootstrap_samples, digest(points_train, algo="crc32"))
 
-boots <- replicate(n_boostrap_samples, run_bootstrap(), simplify=FALSE)
+boots <- replicate(opt$n_bootstrap_samples, run_bootstrap(), simplify=FALSE)
 saveRDS(boots, file=boots_filename)
 
 df_boots <- data.frame(replication_index=seq_along(boots))
@@ -277,7 +289,7 @@ for(landuse in landuses) {
     ggsave(outfile, p, width=10, height=8)
 }
 outfile <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications.csv",
-                   opt$panel_length, opt$landuse_set, n_boostrap_samples)
+                   opt$panel_length, opt$landuse_set, opt$n_bootstrap_samples)
 message("saving ", outfile)
 write.csv(df_boots, file=outfile, row.names=FALSE)
 
@@ -312,4 +324,34 @@ rmse_hmm_miclassification_pasture <- with(df_boots, sqrt(mean((hmm_misclassifica
 message("RMSEs for HMM estimates of misclassification probabilities (i.e. Pr[Y_it | S_it]): crops ", rmse_hmm_miclassification_crops, ", pasture ", rmse_hmm_miclassification_pasture)
 
 message("GBM test set confusion matrix:")
-gbm_test_confusion
+print(gbm_test_confusion)
+
+message("GBM test set accuracy: ", mean(points_test$landuse_predicted_gbm == points_test$validation_landuse_coarse, na.rm=TRUE))
+
+message("trained ML model (GBM classifier) on ",
+        length(unique(gbm_training_set$point_id)), " unique spatial points, ",
+        nrow(gbm_training_set), " point-years")
+
+message("GBM uses ", length(predictors), " MODIS predictors")
+
+message("fit HMM model on ",
+        length(unique(points_test$point_id)), " unique spatial points, ",
+        nrow(points_test), " point-years")
+
+message("HMM estimates of P:")
+print(hmm_params_hat$P)  # Compare to pr_transition, pr_transition_predictions
+
+message("Ground truth transition probabilities:")
+print(pr_transition)
+
+message("Transition probabilities in GBM predictions:")
+print(pr_transition_predictions)
+
+## Note: hmm_params_hat$pr_y and pr_Y_given_S are the transposes of the Upsilon matrix in the paper
+message("HMM estimates of Pr[Y | S]:")
+print(hmm_params_hat$pr_y)  # Compare to pr_Y_given_S
+
+message("Pr[Y | S] computed on test set:")
+print(pr_Y_given_S)
+
+# TODO Write output to file
