@@ -299,6 +299,62 @@ message("mean Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in b
 message("sd Y_it frequency estimate Pr[S_it+1 = crops | S_it = crops] in boots: ", sd(df_boots$predictions_pr_crops_crops))
 message("sd Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in boots: ", sd(df_boots$predictions_pr_pasture_pasture))
 
+##TR Make a graph
+df_pr_graph  <- data.table(variable = character(0), estimator = character(0),pointEst = numeric(0), sdBoot = numeric(0))
+df_pr_graph <- rbind(df_pr_graph,
+                  list('Crops to Pasture','Frequency',pr_transition_predictions['crops','pasture'],sd(1-df_boots$predictions_pr_crops_crops)),
+                  list('Pasture to Crops','Frequency',pr_transition_predictions['pasture','crops'],sd(1-df_boots$predictions_pr_pasture_pasture)),
+                  list('Crops to Pasture','EM',hmm_params_hat$P[which(hmm_params_hat$landuses == 'crops'),which(hmm_params_hat$landuses == 'pasture')],sd(1-df_boots$hmm_pr_crops_crops)),
+                  list('Pasture to Crops','EM',hmm_params_hat$P[which(hmm_params_hat$landuses == 'pasture'),which(hmm_params_hat$landuses == 'crops')],sd(1-df_boots$hmm_pr_pasture_pasture)),
+                  list('Crops to Pasture','Observed',pr_transition['crops','pasture'],sd(1-df_boots$pr_crops_crops)),
+                  list('Pasture to Crops','Observed',pr_transition['pasture','crops'],sd(1-df_boots$pr_pasture_pasture))
+                  )
+
+df_pr_graph[,lb := pointEst - 1.96*sdBoot]
+df_pr_graph[,ub := pointEst + 1.96*sdBoot]
+
+ggplot(df_pr_graph,
+       aes(x = pointEst, y = estimator,xmin = lb, xmax = ub))+
+    geom_point()+
+    geom_errorbarh()+
+    scale_x_axis('Transition Rate')+
+    theme(axis.title.y=element_blank())+
+    facet_wrap(~variable,scales='free_x')
+
+df_err_graph  <- data.table(variable = character(0), estimator = character(0),pointEst = numeric(0), sdBoot = numeric(0))
+df_err_graph <- rbind(df_err_graph,
+                      list('Crops to Pasture','Frequency',(pr_transition_predictions['crops','pasture']-pr_transition['crops','pasture']),sd((1-df_boots$predictions_pr_crops_crops-(1-df_boots$pr_crops_crops)))),
+                      list('Pasture to Crops','Frequency',(pr_transition_predictions['pasture','crops']-pr_transition['pasture','crops']),sd((1-df_boots$predictions_pr_pasture_pasture-(1-df_boots$pr_pasture_pasture)))),
+                      list('Crops to Pasture','EM',(hmm_params_hat$P[which(hmm_params_hat$landuses == 'crops'),which(hmm_params_hat$landuses == 'pasture')]-pr_transition['crops','pasture']),sd((1-df_boots$hmm_pr_crops_crops-(1-df_boots$pr_crops_crops)))),
+                      list('Pasture to Crops','EM',(hmm_params_hat$P[which(hmm_params_hat$landuses == 'pasture'),which(hmm_params_hat$landuses == 'crops')]-pr_transition['pasture','crops']),sd((1-df_boots$hmm_pr_pasture_pasture-(1-df_boots$pr_pasture_pasture))))
+                      )
+
+df_err_graph[,lb := pointEst - 1.96*sdBoot]
+df_err_graph[,ub := pointEst + 1.96*sdBoot]
+
+library(scales)
+plt  <- ggplot(df_pr_graph,
+       aes(x = pointEst, y = estimator,xmin = lb, xmax = ub))+
+    geom_point()+
+    geom_errorbarh(height = .2)+
+    scale_x_continuous('Transition Rate')+
+    theme_bw()+
+    theme(axis.title.y=element_blank())+
+    facet_wrap(~variable,scales='free_x')
+ggsave('validation_graph_transitions.png',units='in',width = 6, height = 5)
+
+plt2 <- ggplot(df_err_graph,
+       aes(x = pointEst, y = estimator,xmin = lb, xmax = ub))+
+    geom_point()+
+    geom_errorbarh(height=.2)+
+    geom_vline(xintercept = 0,linetype = 'dotted')+
+    scale_x_continuous('Transition Rate Errors')+
+    theme_bw()+
+    theme(axis.title.y=element_blank(),panel.spacing = unit(2,'lines'))+
+    facet_wrap(~variable,scales='free_x')
+ggsave('validation_graph_transitions_errors.png',units='in',width = 6, height = 5)
+
+
 rmse_frequency_pr_pasture_pasture <- with(df_boots, sqrt(mean((predictions_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
 rmse_hmm_pr_pasture_pasture <- with(df_boots, sqrt(mean((hmm_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
 message("RMSEs for Pr[S_it+1 = pasture | S_it = pasture]: HMM ", rmse_hmm_pr_pasture_pasture, ", frequency estimator ", rmse_frequency_pr_pasture_pasture)
