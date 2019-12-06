@@ -29,20 +29,20 @@ length(panel[[1]]$y)
 ## Use the simulated panel data to estimate the model's parameters using params0, params1, and params2 as initial values
 
 ## Initialize EM at true parameter values (easy case)
-params0_hat <- get_expectation_minimization_estimates(panel, params0, max_iter=20, epsilon=0.001)
+params0_hat <- get_expectation_maximization_estimates(panel, params0, max_iter=20, epsilon=0.001)
 
 stopifnot(all(diff(params0_hat$loglik) > 0))  # Loglik should be increasing
 max(abs(c(params0_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
 max(abs(params0_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
 
 ## Initialize EM at incorrect parameter values (more difficult)
-params1_hat <- get_expectation_minimization_estimates(panel, params1, max_iter=20, epsilon=0.001)
+params1_hat <- get_expectation_maximization_estimates(panel, params1, max_iter=20, epsilon=0.001)
 
 max(abs(c(params1_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
 max(abs(params1_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
 
 ## Initialize EM at "very" incorrect parameter values (even more difficult)
-params2_hat <- get_expectation_minimization_estimates(panel, params2, max_iter=20, epsilon=0.001)
+params2_hat <- get_expectation_maximization_estimates(panel, params2, max_iter=20, epsilon=0.001)
 
 max(abs(c(params2_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
 max(abs(params2_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)

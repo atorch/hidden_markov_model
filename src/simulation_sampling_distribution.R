@@ -31,7 +31,7 @@ outfile_format <- "simulation_sampling_distribution_with_%s_random_initial_param
 clusterExport(cluster, c("baum_welch",
                          "eq_function_minimum_distance",
                          "get_estimates",
-                         "get_expectation_minimization_estimates",
+                         "get_expectation_maximization_estimates",
                          "get_hmm_and_minimum_distance_estimates_random_initialization",
                          "get_min_distance_estimates",
                          "get_random_initial_parameters",

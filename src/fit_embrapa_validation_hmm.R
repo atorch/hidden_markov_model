@@ -211,7 +211,13 @@ viterbi_paths <- lapply(panel, viterbi_path_time_homogeneous, params=hmm_params_
 dtable$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recursive=TRUE)]
 viterbi_test_confusion <- table(dtable$validation_landuse_coarse, dtable$viterbi_landuse)  # Compare to gbm_test_confusion
 
-## TODO Include (viterbi_test_confusion - gbm_test_confusion) in the validation section?  HMM improves classification accuracy "for free"!
+## TODO Include (viterbi_test_confusion - gbm_test_confusion) in the validation section?
+## HMM improves classification accuracy "for free"! We get more mass on the diagonal of the confusion matrix
+
+## Run MD with time-homogeneous parameters
+estimates_time_homogeneous <- get_minimum_distance_estimates_random_initialization_time_homogeneous(initial_hmm_params[[1]], panel)
+
+estimates_time_homogeneous$min_dist_params_hat_best_objfn
 
 ## Try running both MD and EM with time-varying parameters
 params0 <- initial_hmm_params[[1]]
@@ -226,7 +232,7 @@ estimates_time_varying$min_dist_params_hat_best_objfn
 ## Also looks good!  Doesn't hit edge of parameter space
 estimates_time_varying$em_params_hat_best_likelihood
 
-## Compare time-varying MD and EM estimates (they're fairly close)
+## Compare time-varying MD and EM estimates (they're fairly close: mu and pr_y are nearly identical, P_list differs in some periods)
 estimates_time_varying$em_params_hat_best_likelihood$pr_y - estimates_time_varying$min_dist_params_hat_best_objfn$pr_y
 estimates_time_varying$em_params_hat_best_likelihood$mu - estimates_time_varying$min_dist_params_hat_best_objfn$mu
 lapply(seq_along(params0$P_list), function(time) {
@@ -234,6 +240,8 @@ lapply(seq_along(params0$P_list), function(time) {
 })
 
 ## Bootstrap panel, compute pr_transition, pr_transition_predictions and HMM estimates on each bootstrap sample
+## TODO Include MD in bootstrap
+## TODO Also include MD and EM with time-varying parameters?
 run_bootstrap <- function() {
     panel_indices <- seq_along(panel)
     resampled_panel_indices <- sort(sample(panel_indices, size=length(panel), replace=TRUE))  # Sample by point_id

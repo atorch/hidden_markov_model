@@ -103,7 +103,7 @@ for (i in seq_len(nrow(simulation_df))) {
                              "eq_function_minimum_distance",
                              "get_P_list",
                              "get_deforestation_prob_from_P",
-                             "get_expectation_minimization_estimates",
+                             "get_expectation_maximization_estimates",
                              "get_hmm_and_minimum_distance_estimates_random_initialization",
                              "get_min_distance_estimates",
                              "get_random_initial_parameters",

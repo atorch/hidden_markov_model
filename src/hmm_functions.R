@@ -14,18 +14,26 @@ get_random_initial_parameters <- function(params0) {
 
     initial_parameters <- list(n_components=params0$n_components)
 
-    initial_parameters$P_list <- lapply(params0$P_list, function(correct_P) {
+    if ("P_list" %in% names(initial_parameters)) {
+        initial_parameters$P_list <- lapply(params0$P_list, function(correct_P) {
 
-        ## Probabilities on diagonals of the transition probability matrices
-        ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
-        ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$P_list?
+            ## Probabilities on diagonals of the transition probability matrices
+            ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
+            ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$P_list?
+            random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
+
+            P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
+            diag(P) <- random_uniform
+
+            return(P)
+        })
+    } else {
         random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
 
-        P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
+        P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$P), ncol=ncol(params0$P))
         diag(P) <- random_uniform
-
-        return(P)
-    })
+        initial_parameters$P <- P
+    }
 
     ## Probabilities on the diagonals of the observation probability matrix pr_y
     random_uniform <- runif(params0$n_components, min=0.6, max=0.98)
@@ -40,6 +48,50 @@ get_random_initial_parameters <- function(params0) {
 
 is_diag_dominant <- function(pr_y) {
     return(all(diag(pr_y) > 0.5))
+}
+
+get_min_distance_estimates_time_homogeneous <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
+
+    M_S_joint_initial <- t(initial_params$P * matrix(initial_params$mu, initial_params$n_components, initial_params$n_components))
+
+    x_guess <- c(t(initial_params$pr_y), c(M_S_joint_initial))
+
+    n_components <- initial_params$n_components
+
+    n_equality_constraints <- n_components + 1
+
+    ## Note: the lower bound for the diagonals of pr_y is 0.5 (to make pr_y diagonally dominant);
+    ## the lower bound for all other parameters is zero
+    ## The index using which(c(diag(initial_params$n_components)) > 0) assumes that the first params$n_components^2 elements
+    ## of the x_guess vector (i.e. the argument to objfn_minimum_distance) represent the observation probability matrix pr_y
+    lower_bound <- rep(0, length(x_guess))
+    lower_bound[which(c(diag(initial_params$n_components)) > 0)] = 0.5
+
+    solnp_result <- solnp(x_guess,
+                          fun=objfn_min_dist_time_homogeneous,
+                          eqfun=eq_function_min_dist_time_homogeneous,
+                          eqB=rep(0, n_equality_constraints),
+                          LB=lower_bound,
+                          UB=rep(1, length(x_guess)),
+                          M_Y_joint_hat_list=M_Y_joint_hat_list,
+                          M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
+                          M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
+                          n_components=n_components,
+                          control=list(delta=1e-9, tol=1e-13, trace=1, rho=0.1))  # Careful, sensitive to control
+
+    M_Y_given_S_hat_solnp <- matrix(solnp_result$pars[seq(1, n_components^2)], n_components, n_components)  # Transpose of params0$pr_y
+    M_S_joint_hat_solnp <- matrix(solnp_result$pars[seq((n_components^2) + 1, (n_components^2)*(2))], n_components, n_components)
+
+    ## Note: we keep track of the objective function values so that we can pick the best MD estimate (lowest objfn_values)
+    min_dist_params_hat <- list(pr_y=t(M_Y_given_S_hat_solnp),
+                                P=get_transition_probs_from_M_S_joint(M_S_joint_hat_solnp),
+                                convergence=solnp_result$convergence,
+                                mu=colSums(M_S_joint_hat_solnp),
+                                objfn_values=solnp_result$values,
+                                x_guess=x_guess)
+
+    return(min_dist_params_hat)
+
 }
 
 get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
@@ -110,7 +162,7 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
 
     em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-        return(get_expectation_minimization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
+        return(get_expectation_maximization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
     })
     em_likelihoods <- sapply(em_params_hat_list, function(x) {
         return(max(x$loglik))
@@ -166,9 +218,81 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     return(list("panel_size"=length(panel),
                 "M_Y_joint_hat"=M_Y_joint_hat_list,
                 "em_params_hat_list"=em_params_hat_list,
-                "hmm_params_hat_loglikelihoods"=em_likelihoods,
+                "em_params_hat_loglikelihoods"=em_likelihoods,
                 "initial_parameters_list"=random_initial_parameters,
                 "em_params_hat_best_likelihood"=em_params_hat_best_likelihood,
+                "min_dist_params_hat"=min_dist_params_hat,
+                "min_dist_objfn_values"=min_dist_objfn_values,
+                "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
+                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant))
+}
+
+get_minimum_distance_estimates_random_initialization_time_homogeneous <- function(params0, panel, n_random_starts=10) {
+
+    require(data.table)
+    require(Rsolnp)
+
+    random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
+
+    ## em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
+    ##     return(get_expectation_maximization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
+    ## })
+    ## em_likelihoods <- sapply(em_params_hat_list, function(x) {
+    ##     return(max(x$loglik))
+    ## })
+
+    for(idx in seq_along(panel)) {
+        panel[[idx]]$point_id <- idx
+        panel[[idx]]$time <- seq_along(panel[[idx]]$y)
+    }
+
+    dtable <- rbindlist(Map(data.frame, panel))
+    setkey(dtable, point_id)
+
+    stopifnot(all(c("point_id", "time", "y") %in% names(dtable)))
+
+    dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
+    dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
+
+    M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
+        with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
+    })  # Joint distribution of (Y_{t+1}, Y_{t}) and (Y_{t+2}, Y_{t+1})
+
+    ## Compute inverses once and pass them to get_min_distance_estimates / solnp
+    M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
+
+    M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
+        lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
+            return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
+                        table(y_one_period_ahead, y)) / sum(dtable$time == fixed_t))
+        })
+    })
+
+    min_dist_params_hat <- lapply(random_initial_parameters,
+                                  get_min_distance_estimates_time_homogeneous,
+                                  M_Y_joint_hat_list=M_Y_joint_hat_list,
+                                  M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
+                                  M_fixed_y_Y_joint_hat_list=M_fixed_y_Y_joint_hat_list,
+                                  dtable=dtable)
+
+    min_dist_objfn_values <- sapply(min_dist_params_hat, function(x) {
+        return(min(x$objfn_values))
+    })
+
+    min_dist_params_hat_best_objfn <- min_dist_params_hat[[which.min(min_dist_objfn_values)]]
+
+    min_dist_pr_y_is_diag_dominant <- sapply(min_dist_params_hat, function(x) {
+        return(is_diag_dominant(x$pr_y))
+    })
+
+    ## em_params_hat_best_likelihood <- em_params_hat_list[[which.max(em_likelihoods)]]
+
+    return(list("panel_size"=length(panel),
+                "M_Y_joint_hat"=M_Y_joint_hat_list,
+                ## "em_params_hat_list"=em_params_hat_list,
+                ## "em_params_hat_loglikelihoods"=em_likelihoods,
+                "initial_parameters_list"=random_initial_parameters,
+                ## "em_params_hat_best_likelihood"=em_params_hat_best_likelihood,
                 "min_dist_params_hat"=min_dist_params_hat,
                 "min_dist_objfn_values"=min_dist_objfn_values,
                 "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
@@ -238,9 +362,6 @@ eq_function_minimum_distance <- function(x,
                                          n_components) {
     ## Constraint function for minimum distance estimation (constraint is eq_function(x) = 1 everywhere)
     ## "The main and constraint functions must take the exact same arguments, irrespective of whether they are used"
-    stopifnot(is.vector(x))
-    stopifnot(length(x) == max_time*n_components^2)
-
     candidate_M_Y_given_S <- matrix(x[seq(1, n_components^2)], n_components, n_components)
     candidate_M_S_joint_list <- lapply(seq_len(max_time - 1), function(time_index) {
         return(matrix(x[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
@@ -420,7 +541,7 @@ baum_welch <- function(panel_element, params) {
     return(list(loglik=loglik, pi=pi, pi_transition_list=pi_transition_list))
 }
 
-get_expectation_minimization_estimates <- function(panel, params, max_iter, epsilon=0.001) {
+get_expectation_maximization_estimates <- function(panel, params, max_iter, epsilon=0.001) {
     ## EM for panel of independent HMM realizations; stop at max_iter or distance < epsilon
     ## Written following Ramon van Handel's HMM notes page 87, algorithm 6.1, modified for panel data
     ## https://www.princeton.edu/~rvan/orf557/hmm080728.pdf
@@ -800,23 +921,12 @@ objfn_min_dist_time_homogeneous <- function(x, M_Y_joint_hat_inverse_list, M_Y_j
                                             n_components, W_matrix=NULL, fixed_y=1) {
     ## Objective function for minimum distance estimation
     stopifnot(is.vector(x))
-    stopifnot(length(x) == 2*n_components^2 + n_components)  # Misclassification probabilities, transitions, and initial distribution
-    objects <- get_M_Y_given_S_mu_P_from_vector(x, n_components)
-    candidate_M_Y_given_S <- objects$candidate_M_Y_given_S
-    mu <- objects$mu
-    P <- objects$P
-    candidate_M_S_joint_list <- list()
-    for(time_index in seq_len(length(unique(dtable$year)) - 1)) {
-        if(time_index == 1) {
-            mu_t <- mu
-        } else {
-            mu_t <- rowSums(candidate_M_S_joint_list[[time_index - 1]])
-        }
-        candidate_M_S_joint_list[[time_index]] <- t(P * matrix(mu_t, length(mu_t), length(mu_t)))
-    }
-    stopifnot(length(candidate_M_S_joint_list) == length(M_Y_joint_hat_inverse_list))
+    stopifnot(length(x) == 2 * n_components^2)  # Misclassification probabilities and joint distribution
+
+    candidate_M_Y_given_S <- matrix(x[seq(1, n_components^2)], n_components, n_components)
+    candidate_M_S_joint <- matrix(x[seq((n_components^2) + 1, (n_components^2)*(2))], n_components, n_components)
+
     candidate_D_list <- lapply(seq_len(length(unique(dtable$year)) - 2), function(fixed_t) {
-        candidate_M_S_joint <- candidate_M_S_joint_list[[fixed_t + 1]]
         candidate_P <- candidate_M_S_joint / matrix(colSums(candidate_M_S_joint),
                                                     nrow(candidate_M_S_joint),
                                                     ncol(candidate_M_S_joint), byrow=TRUE)  # From t+1 to t+2
@@ -825,20 +935,24 @@ objfn_min_dist_time_homogeneous <- function(x, M_Y_joint_hat_inverse_list, M_Y_j
         return(candidate_D)
     })
     stopifnot(length(candidate_D_list) == length(M_fixed_y_Y_joint_hat_list[[1]]))  # Careful with fixed_y
+
+    ## TODO g1_vectors_for_fixed_y
     g1_vector <- sapply(seq_along(candidate_D_list), function(time_index) {
         return(norm(M_fixed_y_Y_joint_hat_list[[fixed_y]][[time_index]] %*% M_Y_joint_hat_inverse_list[[time_index]] %*%
                     candidate_M_Y_given_S -
                     candidate_M_Y_given_S %*% candidate_D_list[[time_index]], type="F"))
     })
-    g2_vector <- sapply(seq_along(candidate_M_S_joint_list), function(time_index) {
-        return(norm(candidate_M_Y_given_S %*% candidate_M_S_joint_list[[time_index]] %*% t(candidate_M_Y_given_S) -
+    g2_vector <- sapply(seq_along(M_Y_joint_hat_list), function(time_index) {
+        return(norm(candidate_M_Y_given_S %*% candidate_M_S_joint %*% t(candidate_M_Y_given_S) -
                     M_Y_joint_hat_list[[time_index]], type="F"))
     })
+
     g <- c(g1_vector, g2_vector)
     if(is.null(W_matrix)) {
         W_matrix <- diag(length(g))
     }
     stopifnot(nrow(W_matrix) == length(g) && ncol(W_matrix) == length(g))
+
     return(as.vector(t(g) %*% W_matrix %*% g))
 }
 
@@ -846,11 +960,12 @@ eq_function_min_dist_time_homogeneous <- function(x, M_Y_joint_hat_inverse_list,
                                                   n_components, W_matrix=NULL) {
     ## Constraint function for minimum distance estimation (constraint is eq_function(x) = 1 everywhere)
     ## "The main and constraint functions must take the exact same arguments, irrespective of whether they are used"
-    objects <- get_M_Y_given_S_mu_P_from_vector(x, n_components)
-    candidate_M_Y_given_S <- objects$candidate_M_Y_given_S
-    mu <- objects$mu
-    P <- objects$P
-    return(c(colSums(candidate_M_Y_given_S), sum(mu), rowSums(P)))
+
+    candidate_M_Y_given_S <- matrix(x[seq(1, n_components^2)], n_components, n_components)
+    candidate_M_S_joint <- matrix(x[seq((n_components^2) + 1, (n_components^2)*(2))], n_components, n_components)
+
+    ## Note: subtract 1 from probabilities so that the contraint function must always equal zero
+    return(c(colSums(candidate_M_Y_given_S) - 1.0, sum(candidate_M_S_joint) - 1.0))
 }
 
 valid_parameters_time_homogeneous <- function(params) {
