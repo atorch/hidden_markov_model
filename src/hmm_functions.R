@@ -14,7 +14,7 @@ get_random_initial_parameters <- function(params0) {
 
     initial_parameters <- list(n_components=params0$n_components)
 
-    if ("P_list" %in% names(initial_parameters)) {
+    if ("P_list" %in% names(params0)) {
         initial_parameters$P_list <- lapply(params0$P_list, function(correct_P) {
 
             ## Probabilities on diagonals of the transition probability matrices
@@ -326,7 +326,10 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
             return(candidate_D)
         })
     })
-    if(abs(candidate_M_Y_given_S[1,1]-candidate_M_Y_given_S[1,2])<0) message('Close to non diag dom')
+
+    ## TODO This assumes n_components == 3
+    if(abs(candidate_M_Y_given_S[1, 1] - candidate_M_Y_given_S[1, 2]) < 0) message('Close to non diag dom')
+
     stopifnot(length(candidate_D_list) == length(M_fixed_y_Y_joint_hat_list))  # Careful, lists of lists
     stopifnot(length(candidate_D_list[[1]]) == length(M_fixed_y_Y_joint_hat_list[[1]]))  # Careful with fixed_y
     g1_vectors_for_fixed_y <- lapply(seq_along(candidate_D_list), function(fixed_y) {
@@ -918,7 +921,7 @@ em_parameter_estimates_time_homogeneous <- function(panel, params, max_iter, eps
 }
 
 objfn_min_dist_time_homogeneous <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_list, M_fixed_y_Y_joint_hat_list,
-                                            n_components, W_matrix=NULL, fixed_y=1) {
+                                            n_components, W_matrix=NULL) {
     ## Objective function for minimum distance estimation
     stopifnot(is.vector(x))
     stopifnot(length(x) == 2 * n_components^2)  # Misclassification probabilities and joint distribution
@@ -926,22 +929,26 @@ objfn_min_dist_time_homogeneous <- function(x, M_Y_joint_hat_inverse_list, M_Y_j
     candidate_M_Y_given_S <- matrix(x[seq(1, n_components^2)], n_components, n_components)
     candidate_M_S_joint <- matrix(x[seq((n_components^2) + 1, (n_components^2)*(2))], n_components, n_components)
 
-    candidate_D_list <- lapply(seq_len(length(unique(dtable$year)) - 2), function(fixed_t) {
-        candidate_P <- candidate_M_S_joint / matrix(colSums(candidate_M_S_joint),
-                                                    nrow(candidate_M_S_joint),
-                                                    ncol(candidate_M_S_joint), byrow=TRUE)  # From t+1 to t+2
-        candidate_D <- matrix(0, n_components, n_components)
-        diag(candidate_D) <- candidate_P %*% candidate_M_Y_given_S[fixed_y, ]
-        return(candidate_D)
+    candidate_D_list <- lapply(seq_len(n_components), function(fixed_y) {
+        lapply(seq_len(length(unique(dtable$year)) - 2), function(fixed_t) {
+            candidate_P <- candidate_M_S_joint / matrix(colSums(candidate_M_S_joint),
+                                                        nrow(candidate_M_S_joint),
+                                                        ncol(candidate_M_S_joint), byrow=TRUE)  # From t+1 to t+2
+            candidate_D <- matrix(0, n_components, n_components)
+            diag(candidate_D) <- candidate_P %*% candidate_M_Y_given_S[fixed_y, ]
+            return(candidate_D)
+        })
     })
-    stopifnot(length(candidate_D_list) == length(M_fixed_y_Y_joint_hat_list[[1]]))  # Careful with fixed_y
 
-    ## TODO g1_vectors_for_fixed_y
-    g1_vector <- sapply(seq_along(candidate_D_list), function(time_index) {
-        return(norm(M_fixed_y_Y_joint_hat_list[[fixed_y]][[time_index]] %*% M_Y_joint_hat_inverse_list[[time_index]] %*%
-                    candidate_M_Y_given_S -
-                    candidate_M_Y_given_S %*% candidate_D_list[[time_index]], type="F"))
+    g1_vectors_for_fixed_y <- lapply(seq_along(candidate_D_list), function(fixed_y) {
+        sapply(seq_along(candidate_D_list), function(time_index) {
+            return(norm(M_fixed_y_Y_joint_hat_list[[fixed_y]][[time_index]] %*% M_Y_joint_hat_inverse_list[[time_index]] %*%
+                        candidate_M_Y_given_S -
+                        candidate_M_Y_given_S %*% candidate_D_list[[fixed_y]][[time_index]], type="F"))
+        })
     })
+    g1_vector <- c(g1_vectors_for_fixed_y, recursive=TRUE)
+
     g2_vector <- sapply(seq_along(M_Y_joint_hat_list), function(time_index) {
         return(norm(candidate_M_Y_given_S %*% candidate_M_S_joint %*% t(candidate_M_Y_given_S) -
                     M_Y_joint_hat_list[[time_index]], type="F"))
