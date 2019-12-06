@@ -223,6 +223,16 @@ estimates_time_varying <- get_hmm_and_minimum_distance_estimates_random_initiali
 ## Estimated crops->pasture transition probability hits edge (it's zero) in one period, but seems reasonable
 estimates_time_varying$min_dist_params_hat_best_objfn
 
+## Also looks good!  Doesn't hit edge of parameter space
+estimates_time_varying$em_params_hat_best_likelihood
+
+## Compare time-varying MD and EM estimates (they're fairly close)
+estimates_time_varying$em_params_hat_best_likelihood$pr_y - estimates_time_varying$min_dist_params_hat_best_objfn$pr_y
+estimates_time_varying$em_params_hat_best_likelihood$mu - estimates_time_varying$min_dist_params_hat_best_objfn$mu
+lapply(seq_along(params0$P_list), function(time) {
+    estimates_time_varying$em_params_hat_best_likelihood$P_list[[time]] - estimates_time_varying$min_dist_params_hat_best_objfn$P_list[[time]]
+})
+
 ## Bootstrap panel, compute pr_transition, pr_transition_predictions and HMM estimates on each bootstrap sample
 run_bootstrap <- function() {
     panel_indices <- seq_along(panel)
