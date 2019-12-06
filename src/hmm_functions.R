@@ -124,7 +124,7 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     dtable <- rbindlist(Map(data.frame, panel))
     setkey(dtable, point_id)
 
-    stopifnot(all(c("point_id", "time", "x", "y") %in% names(dtable)))
+    stopifnot(all(c("point_id", "time", "y") %in% names(dtable)))
 
     dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
     dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
