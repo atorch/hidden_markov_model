@@ -173,6 +173,7 @@ message("GBM test set accuracy: ", mean(points_test$landuse_predicted_gbm == poi
 
 ## Use GBM for predicted land use
 points_test$landuse_predicted <- factor(points_test$landuse_predicted_gbm)
+pr_Y_given_S <- with(points_test, prop.table(table(validation_landuse_coarse, landuse_predicted), margin=1))
 
 ## Examine transition probabilities in validation_landuse_coarse versus predicted land use
 dtable <- data.table(points_test)
@@ -188,18 +189,19 @@ pr_transition_predictions <- with(dtable, prop.table(table(landuse_predicted, la
 message("pr_transition: ", paste(round(pr_transition, 3), collapse=" "))
 message("pr_transition_predictions: ", paste(round(pr_transition_predictions, 3), collapse=" "))
 
-pr_Y_given_S <- with(points_test, prop.table(table(validation_landuse_coarse, landuse_predicted), margin=1))
+initial_hmm_params <- get_initial_hmm_params(opt$landuse_set)
 
-list_of_initial_hmm_params <- get_initial_hmm_params(opt$landuse_set)
-
+## Note: time is needed for time-varying estimation code
+dtable[, time := year - min(year)]
 panel <- get_hmm_panel_from_points(dtable, discrete_y_varname="landuse_predicted")  # List of panel elements
-baum_welch_time_homogeneous(panel[[1]], params=list_of_initial_hmm_params[[1]])  # Test, compare pi to panel[[1]]$y and panel[[1]]$validation_landuse
 
-list_of_hmm_params_hat <- lapply(list_of_initial_hmm_params, function(initial_hmm_params) {
+list_of_hmm_params_hat <- lapply(initial_hmm_params, function(initial_hmm_params) {
     return(em_parameter_estimates_time_homogeneous(panel=panel, params=initial_hmm_params, max_iter=50, epsilon=0.001))
 })
 
-hmm_params_hat <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
+## Choose estimate with highest log likelihood
+hmm_params_hat <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]
+
 hmm_params_hat$P  # Compare to pr_transition, pr_transition_predictions
 hmm_params_hat$pr_y  # Compare to pr_Y_given_S
 message("hmm_params_hat$P: ", paste(round(hmm_params_hat$P, 3), collapse=" "))
@@ -209,7 +211,37 @@ viterbi_paths <- lapply(panel, viterbi_path_time_homogeneous, params=hmm_params_
 dtable$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recursive=TRUE)]
 viterbi_test_confusion <- table(dtable$validation_landuse_coarse, dtable$viterbi_landuse)  # Compare to gbm_test_confusion
 
+## TODO Include (viterbi_test_confusion - gbm_test_confusion) in the validation section?
+## HMM improves classification accuracy "for free"! We get more mass on the diagonal of the confusion matrix
+
+## Run MD with time-homogeneous parameters
+estimates_time_homogeneous <- get_minimum_distance_estimates_random_initialization_time_homogeneous(initial_hmm_params[[1]], panel)
+
+estimates_time_homogeneous$min_dist_params_hat_best_objfn
+
+## Try running both MD and EM with time-varying parameters
+params0 <- initial_hmm_params[[1]]
+params0$P_list <- rep(list(params0$P), length(unique((dtable$year))) - 1)
+params0$P <- NULL
+
+estimates_time_varying <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, panel)
+
+## Estimated crops->pasture transition probability hits edge (it's zero) in one period, but seems reasonable
+estimates_time_varying$min_dist_params_hat_best_objfn
+
+## Also looks good!  Doesn't hit edge of parameter space
+estimates_time_varying$em_params_hat_best_likelihood
+
+## Compare time-varying MD and EM estimates (they're fairly close: mu and pr_y are nearly identical, P_list differs in some periods)
+estimates_time_varying$em_params_hat_best_likelihood$pr_y - estimates_time_varying$min_dist_params_hat_best_objfn$pr_y
+estimates_time_varying$em_params_hat_best_likelihood$mu - estimates_time_varying$min_dist_params_hat_best_objfn$mu
+lapply(seq_along(params0$P_list), function(time) {
+    estimates_time_varying$em_params_hat_best_likelihood$P_list[[time]] - estimates_time_varying$min_dist_params_hat_best_objfn$P_list[[time]]
+})
+
 ## Bootstrap panel, compute pr_transition, pr_transition_predictions and HMM estimates on each bootstrap sample
+## TODO Include MD in bootstrap
+## TODO Also include MD and EM with time-varying parameters?
 run_bootstrap <- function() {
     panel_indices <- seq_along(panel)
     resampled_panel_indices <- sort(sample(panel_indices, size=length(panel), replace=TRUE))  # Sample by point_id
@@ -228,7 +260,7 @@ run_bootstrap <- function() {
     pr_transition_boot <- with(dtable_boot, prop.table(table(validation_landuse_coarse, validation_landuse_coarse_next), 1))
     pr_transition_boot_predictions <- with(dtable_boot, prop.table(table(predicted_landuse, predicted_landuse_next), 1))
     prediction_confusion_matrix <- with(dtable_boot, prop.table(table(validation_landuse_coarse, predicted_landuse), margin=1))  # Compare to hmm_params_hat$pr_y
-    list_of_hmm_params_hat <- lapply(list_of_initial_hmm_params, function(initial_hmm_params) {
+    list_of_hmm_params_hat <- lapply(initial_hmm_params, function(initial_hmm_params) {
         return(em_parameter_estimates_time_homogeneous(panel=panel_boot, params=initial_hmm_params, max_iter=50, epsilon=0.001))
     })
     hmm_params_hat <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
