@@ -7,12 +7,13 @@ library(plyr); library(dplyr)  # For bind_rows
 library(randomForest)
 library(Rsolnp)
 library(sp)
+library(stringr)
 
 set.seed(789)
 
 # Binary for {crops, pasture}, ternary for {soy, other crops, pasture}
 opt_list <- list(make_option("--landuse_set", default="binary"),
-                 make_option("--n_bootstrap_samples", default=100, type=("integer")),
+                 make_option("--n_bootstrap_samples", default=10, type=("integer")),  # TODO Back to 100
                  make_option("--panel_length", default="short"),
                  make_option("--classifier_training_fraction", default=0.15, type="double"),
                  make_option("--classifier_pasture_fraction", default=0.6, type="double",
@@ -245,6 +246,7 @@ lapply(seq_along(params0$P_list), function(time) {
 run_bootstrap <- function() {
     panel_indices <- seq_along(panel)
     resampled_panel_indices <- sort(sample(panel_indices, size=length(panel), replace=TRUE))  # Sample by point_id
+
     panel_boot <- panel[resampled_panel_indices]
     dtable_boot <- rbindlist(lapply(seq_along(panel_boot), function(panel_boot_index) {
         ## Reconstruct dtable from resampled panel; careful, point_id is no longer a unique identifier, use boot_index instead
@@ -254,6 +256,7 @@ run_bootstrap <- function() {
                    validation_landuse=panel_element$validation_landuse, year=seq(min(dtable$year), max(dtable$year)))
     }))
     setkey(dtable_boot, boot_index, year)
+
     dtable_boot[, predicted_landuse := levels(dtable$landuse_predicted)[y]]
     dtable_boot[, predicted_landuse_next := c(tail(as.character(predicted_landuse), .N-1), as.character(NA)), by="boot_index"]
     dtable_boot[, validation_landuse_coarse_next := c(tail(as.character(validation_landuse_coarse), .N-1), as.character(NA)), by="boot_index"]
@@ -265,6 +268,8 @@ run_bootstrap <- function() {
     })
     hmm_params_hat <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
     hmm_params_hat$landuses <- levels(dtable$landuse_predicted)
+
+    ## TODO Could modify this return value to make summary stats dataframe easier to construct
     return(list(pr_transition=pr_transition_boot,
                 pr_transition_predictions=pr_transition_boot_predictions,
                 hmm_params_hat=hmm_params_hat,
@@ -343,61 +348,50 @@ message("mean Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in b
 message("sd Y_it frequency estimate Pr[S_it+1 = crops | S_it = crops] in boots: ", sd(df_boots$predictions_pr_crops_crops))
 message("sd Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in boots: ", sd(df_boots$predictions_pr_pasture_pasture))
 
-##TR Make a graph
-df_pr_graph  <- data.table(variable = character(0), estimator = character(0),pointEst = numeric(0), sdBoot = numeric(0))
-df_pr_graph <- rbind(df_pr_graph,
-                  list('Crops to Pasture','Frequency',pr_transition_predictions['crops','pasture'],sd(1-df_boots$predictions_pr_crops_crops)),
-                  list('Pasture to Crops','Frequency',pr_transition_predictions['pasture','crops'],sd(1-df_boots$predictions_pr_pasture_pasture)),
-                  list('Crops to Pasture','EM',hmm_params_hat$P[which(hmm_params_hat$landuses == 'crops'),which(hmm_params_hat$landuses == 'pasture')],sd(1-df_boots$hmm_pr_crops_crops)),
-                  list('Pasture to Crops','EM',hmm_params_hat$P[which(hmm_params_hat$landuses == 'pasture'),which(hmm_params_hat$landuses == 'crops')],sd(1-df_boots$hmm_pr_pasture_pasture)),
-                  list('Crops to Pasture','Observed',pr_transition['crops','pasture'],sd(1-df_boots$pr_crops_crops)),
-                  list('Pasture to Crops','Observed',pr_transition['pasture','crops'],sd(1-df_boots$pr_pasture_pasture))
-                  )
+df_boots$replication_index <- NULL
+df_boots_means <- colMeans(df_boots)
+df_boots_sd <- apply(df_boots, MARGIN=2, FUN=sd)
 
-df_pr_graph[,lb := pointEst - 1.96*sdBoot]
-df_pr_graph[,ub := pointEst + 1.96*sdBoot]
+get_estimator_from_varname <- function(varname) {
+    if(str_starts(varname, "hmm_")) {
+        return("EM")
+    }
+    if(str_starts(varname, "predictions_")) {
+        return("Frequency")
+    }
+    return("Ground Truth")
+}
 
-ggplot(df_pr_graph,
-       aes(x = pointEst, y = estimator,xmin = lb, xmax = ub))+
-    geom_point()+
-    geom_errorbarh()+
-    scale_x_axis('Transition Rate')+
-    theme(axis.title.y=element_blank())+
-    facet_wrap(~variable,scales='free_x')
+get_variable_from_varname <- function(varname) {
+    if(str_detect(varname, "pasture_pasture")) {
+        return("Pasture to Pasture")
+    }
+    if(str_detect(varname, "crops_crops")) {
+        return("Crops to Crops")
+    }
+    ## TODO Misclassification Probs
+    return("Other")
+}
 
-df_err_graph  <- data.table(variable = character(0), estimator = character(0),pointEst = numeric(0), sdBoot = numeric(0))
-df_err_graph <- rbind(df_err_graph,
-                      list('Crops to Pasture','Frequency',(pr_transition_predictions['crops','pasture']-pr_transition['crops','pasture']),sd((1-df_boots$predictions_pr_crops_crops-(1-df_boots$pr_crops_crops)))),
-                      list('Pasture to Crops','Frequency',(pr_transition_predictions['pasture','crops']-pr_transition['pasture','crops']),sd((1-df_boots$predictions_pr_pasture_pasture-(1-df_boots$pr_pasture_pasture)))),
-                      list('Crops to Pasture','EM',(hmm_params_hat$P[which(hmm_params_hat$landuses == 'crops'),which(hmm_params_hat$landuses == 'pasture')]-pr_transition['crops','pasture']),sd((1-df_boots$hmm_pr_crops_crops-(1-df_boots$pr_crops_crops)))),
-                      list('Pasture to Crops','EM',(hmm_params_hat$P[which(hmm_params_hat$landuses == 'pasture'),which(hmm_params_hat$landuses == 'crops')]-pr_transition['pasture','crops']),sd((1-df_boots$hmm_pr_pasture_pasture-(1-df_boots$pr_pasture_pasture))))
-                      )
+df_boots_summary <- data.frame(varname=names(df_boots_means), pointEst=df_boots_means, sdBoot=df_boots_sd)
+df_boots_summary$estimator <- sapply(df_boots_summary$varname, get_estimator_from_varname)
+df_boots_summary$variable <- sapply(df_boots_summary$varname, get_variable_from_varname)
 
-df_err_graph[,lb := pointEst - 1.96*sdBoot]
-df_err_graph[,ub := pointEst + 1.96*sdBoot]
+## Plot of boostrap results (point estimates and confidence intervals)
+## TODO Rename "Observed" to "Ground Truth"?  Confusing because our Ys (the noisy classifications) are also observed,
+## and are the _only_ observations available in settings where no ground truth is available
 
-library(scales)
-plt  <- ggplot(df_pr_graph,
-       aes(x = pointEst, y = estimator,xmin = lb, xmax = ub))+
-    geom_point()+
-    geom_errorbarh(height = .2)+
-    scale_x_continuous('Transition Rate')+
-    theme_bw()+
-    theme(axis.title.y=element_blank())+
-    facet_wrap(~variable,scales='free_x')
-ggsave('validation_graph_transitions.png',units='in',width = 6, height = 5)
+df_boots_summary_pr <- subset(df_boots_summary, variable != "Other")
+df_boots_summary_pr$lb <- with(df_boots_summary_pr, pointEst - 1.96 * sdBoot)
+df_boots_summary_pr$ub <- with(df_boots_summary_pr, pointEst + 1.96 * sdBoot)
 
-plt2 <- ggplot(df_err_graph,
-       aes(x = pointEst, y = estimator,xmin = lb, xmax = ub))+
-    geom_point()+
-    geom_errorbarh(height=.2)+
-    geom_vline(xintercept = 0,linetype = 'dotted')+
-    scale_x_continuous('Transition Rate Errors')+
-    theme_bw()+
-    theme(axis.title.y=element_blank(),panel.spacing = unit(2,'lines'))+
-    facet_wrap(~variable,scales='free_x')
-ggsave('validation_graph_transitions_errors.png',units='in',width = 6, height = 5)
-
+p <- ggplot(df_boots_summary_pr,
+            aes(x = pointEst, y = estimator, xmin = lb, xmax = ub)) +
+    geom_point() +
+    geom_errorbarh(height=0) +
+    scale_x_continuous('Transition Rate') +
+    theme(axis.title.y=element_blank()) +
+    facet_wrap(~ variable, scales='free_x')
 
 rmse_frequency_pr_pasture_pasture <- with(df_boots, sqrt(mean((predictions_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
 rmse_hmm_pr_pasture_pasture <- with(df_boots, sqrt(mean((hmm_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
@@ -441,5 +435,3 @@ print(hmm_params_hat$pr_y)  # Compare to pr_Y_given_S
 
 message("Pr[Y | S] computed on test set:")
 print(pr_Y_given_S)
-
-# TODO Write output to file
