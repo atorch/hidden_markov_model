@@ -11,9 +11,7 @@ library(stringr)
 
 set.seed(789)
 
-# Binary for {crops, pasture}, ternary for {soy, other crops, pasture}
-opt_list <- list(make_option("--landuse_set", default="binary"),
-                 make_option("--n_bootstrap_samples", default=10, type=("integer")),  # TODO Back to 100
+opt_list <- list(make_option("--n_bootstrap_samples", default=10, type=("integer")),  # TODO Back to 100
                  make_option("--panel_length", default="short"),
                  make_option("--classifier_training_fraction", default=0.15, type="double"),
                  make_option("--classifier_pasture_fraction", default=0.6, type="double",
@@ -21,7 +19,6 @@ opt_list <- list(make_option("--landuse_set", default="binary"),
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
-stopifnot(opt$landuse_set %in% c("binary", "ternary"))
 stopifnot(opt$panel_length %in% c("long", "short"))
 stopifnot(0 < opt$classifier_training_fraction && opt$classifier_training_fraction < 1)
 
@@ -69,16 +66,10 @@ message("fraction of point-years missing ground truth land use: ", mean(is.na(po
 
 message("number of unique points missing ground truth land use in one or more years: ", length(unique(points$point_id[is.na(points$validation_landuse)])))
 
-message("running validation exercise with ", opt$landuse_set, " land use set S")
-if(opt$landuse_set == "binary") {
-    map_landuse_to_S <- map_landuse_to_S_binary
-    points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
-    stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("crops", "pasture")))
-} else {
-    map_landuse_to_S <- map_landuse_to_S_ternary
-    points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
-    stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("soy", "non-soy crops", "pasture")))
-}
+## Binary for {crops, pasture}, ternary for {soy, other crops, pasture}
+map_landuse_to_S <- map_landuse_to_S_binary
+points$validation_landuse_coarse <- plyr::revalue(points$validation_landuse, replace=map_landuse_to_S)
+stopifnot(all(is.na(points$validation_landuse_coarse) | points$validation_landuse_coarse %in% c("crops", "pasture")))
 
 table(points$validation_landuse_coarse)  # Careful, pasture is rare
 points$validation_landuse_coarse <- factor(points$validation_landuse_coarse)  # Factor for classification
@@ -102,46 +93,24 @@ stopifnot(all(mir_vars %in% names(points)))
 stopifnot(all(red_vars %in% names(points)))
 stopifnot(all(blue_vars %in% names(points)))
 
-get_initial_hmm_params <- function(landuse_set) {
-    if(landuse_set == "binary") {
-        initial_hmm_params <- list(list(P=rbind(c(0.90, 0.10),
-                                                c(0.10, 0.90)),
-                                        mu=c(0.6, 0.4),
-                                        pr_y=rbind(c(0.80, 0.20),
-                                                   c(0.20, 0.80)),
-                                        n_components=2),
-                                   list(P=rbind(c(0.90, 0.10),
-                                                c(0.30, 0.70)),
-                                        mu=c(0.6, 0.4),
-                                        pr_y=rbind(c(0.90, 0.10),
-                                                   c(0.30, 0.70)),
-                                        n_components=2),
-                                   list(P=rbind(c(0.90, 0.10),
-                                                c(0.40, 0.60)),
-                                        mu=c(0.6, 0.4),
-                                        pr_y=rbind(c(0.90, 0.10),
-                                                   c(0.30, 0.70)),
-                                        n_components=2))
-    } else {
-        initial_hmm_params <- list(list(P=rbind(c(0.80, 0.10, 0.10),
-                                                c(0.10, 0.80, 0.10),
-                                                c(0.10, 0.10, 0.80)),
-                                        mu=c(1/3, 1/3, 1/3),
-                                        pr_y=rbind(c(0.80, 0.10, 0.10),
-                                                   c(0.10, 0.80, 0.10),
-                                                   c(0.10, 0.10, 0.80)),
-                                        n_components=3),
-                                   list(P=rbind(c(.60, 0.20, 0.20),
-                                                c(0.20, 0.60, 0.20),
-                                                c(0.10, 0.10, 0.80)),
-                                        mu=c(0.2, 0.3, 0.5),
-                                        pr_y=rbind(c(0.60, 0.20, 0.20),
-                                                   c(0.20, 0.60, 0.20),
-                                                   c(0.10, 0.10, 0.80)),
-                                        n_components=3))
-    }
-    return(initial_hmm_params)
-}
+initial_hmm_params <- list(list(P=rbind(c(0.90, 0.10),
+                                        c(0.10, 0.90)),
+                                mu=c(0.6, 0.4),
+                                pr_y=rbind(c(0.80, 0.20),
+                                           c(0.20, 0.80)),
+                                n_components=2),
+                           list(P=rbind(c(0.90, 0.10),
+                                        c(0.30, 0.70)),
+                                mu=c(0.6, 0.4),
+                                pr_y=rbind(c(0.90, 0.10),
+                                           c(0.30, 0.70)),
+                                n_components=2),
+                           list(P=rbind(c(0.90, 0.10),
+                                        c(0.40, 0.60)),
+                                mu=c(0.6, 0.4),
+                                pr_y=rbind(c(0.90, 0.10),
+                                           c(0.30, 0.70)),
+                                n_components=2))
 
 points_train <- subset(points, point_id %in% point_id_train)
 points_test <- subset(points, !point_id %in% point_id_train)
@@ -189,8 +158,6 @@ pr_transition <- with(dtable, prop.table(table(validation_landuse_coarse, valida
 pr_transition_predictions <- with(dtable, prop.table(table(landuse_predicted, landuse_predicted_next), 1))
 message("pr_transition: ", paste(round(pr_transition, 3), collapse=" "))
 message("pr_transition_predictions: ", paste(round(pr_transition_predictions, 3), collapse=" "))
-
-initial_hmm_params <- get_initial_hmm_params(opt$landuse_set)
 
 ## Note: time is needed for time-varying estimation code
 dtable[, time := year - min(year)]
@@ -260,29 +227,50 @@ run_bootstrap <- function() {
     dtable_boot[, predicted_landuse := levels(dtable$landuse_predicted)[y]]
     dtable_boot[, predicted_landuse_next := c(tail(as.character(predicted_landuse), .N-1), as.character(NA)), by="boot_index"]
     dtable_boot[, validation_landuse_coarse_next := c(tail(as.character(validation_landuse_coarse), .N-1), as.character(NA)), by="boot_index"]
+
     pr_transition_boot <- with(dtable_boot, prop.table(table(validation_landuse_coarse, validation_landuse_coarse_next), 1))
     pr_transition_boot_predictions <- with(dtable_boot, prop.table(table(predicted_landuse, predicted_landuse_next), 1))
+
     prediction_confusion_matrix <- with(dtable_boot, prop.table(table(validation_landuse_coarse, predicted_landuse), margin=1))
+
     list_of_hmm_params_hat <- lapply(initial_hmm_params, function(initial_hmm_params) {
         return(em_parameter_estimates_time_homogeneous(panel=panel_boot, params=initial_hmm_params, max_iter=50, epsilon=0.001))
     })
     hmm_params_hat <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
     hmm_params_hat$landuses <- levels(dtable$landuse_predicted)
 
-    df_pr_crops_pasture <- data.frame("variable"=c(rep("Crops to Pasture", 3)),
+    params0 <- initial_hmm_params[[1]]
+    params0$P_list <- rep(list(params0$P), length(unique((dtable$year))) - 1)
+    params0$P <- NULL
+
+    estimates_time_varying <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, panel)
+
+    df_pr_crops_pasture <- data.frame("variable"=rep("Crops to Pasture", 3),
+                                      "time_homogeneous"=TRUE,
                                       "estimator"=c("EM", "Frequency", "Ground Truth"),
                                       "estimated_value"=c(hmm_params_hat$P[1, 2], pr_transition_boot_predictions[1, 2], pr_transition_boot[1, 2]))
 
-    df_pr_pasture_crops <- data.frame("variable"=c(rep("Pasture to Crops", 3)),
+    df_pr_pasture_crops <- data.frame("variable"=rep("Pasture to Crops", 3),
+                                      "time_homogeneous"=TRUE,
                                       "estimator"=c("EM", "Frequency", "Ground Truth"),
                                       "estimated_value"=c(hmm_params_hat$P[2, 1], pr_transition_boot_predictions[2, 1], pr_transition_boot[2, 1]))
 
-    return(rbind(df_pr_crops_pasture, df_pr_pasture_crops))
+    df_pr_y_crops <- data.frame("variable"=rep("Pr[Y = crops | S = crops]", 2),
+                                "time_homogeneous"=TRUE,
+                                "estimator"=c("EM", "Ground Truth"),
+                                "estimated_value"=c(hmm_params_hat$pr_y[1, 1], prediction_confusion_matrix[1, 1]))
+
+    df_pr_y_pasture <- data.frame("variable"=rep("Pr[Y = pasture | S = pasture]", 2),
+                                  "time_homogeneous"=TRUE,
+                                  "estimator"=c("EM", "Ground Truth"),
+                                  "estimated_value"=c(hmm_params_hat$pr_y[2, 2], prediction_confusion_matrix[2, 2]))
+
+    return(rbind(df_pr_crops_pasture, df_pr_pasture_crops, df_pr_y_crops, df_pr_y_pasture))
 
 }
 
-boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications_%s.rds",
-                          opt$panel_length, opt$landuse_set, opt$n_bootstrap_samples, digest(points_train, algo="crc32"))
+boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_replications_%s.rds",
+                          opt$panel_length, opt$n_bootstrap_samples, digest(points_train, algo="crc32"))
 
 boots <- rbindlist(replicate(opt$n_bootstrap_samples, run_bootstrap(), simplify=FALSE))
 ## saveRDS(boots, file=boots_filename)
@@ -291,11 +279,12 @@ boots_summary <- boots[, list("mean_estimated_value"=mean(estimated_value),
                               "sd_estimated_value"=sd(estimated_value)),
                        by=c("variable", "estimator")]
 
-boots_summary_pr <- subset(boots_summary, variable %in% c("Crops to Pasture", "Pasture to Crops"))
-boots_summary_pr$lb <- with(boots_summary_pr, mean_estimated_value - 1.96 * sd_estimated_value)
-boots_summary_pr$ub <- with(boots_summary_pr, mean_estimated_value + 1.96 * sd_estimated_value)
+boots_summary[, lb := mean_estimated_value - 1.96 * sd_estimated_value]
+boots_summary[, ub := mean_estimated_value + 1.96 * sd_estimated_value]
 
-p <- ggplot(boots_summary_pr,
+boots_summary_P <- subset(boots_summary, variable %in% c("Crops to Pasture", "Pasture to Crops"))
+
+p <- ggplot(boots_summary_P,
             aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
     geom_point() +
     geom_errorbarh(height=0) +
@@ -303,6 +292,17 @@ p <- ggplot(boots_summary_pr,
     theme(axis.title.y=element_blank()) +
     facet_wrap(~ variable, scales='free_x')
 ggsave("embrapa_bootstrap_transition_probability_confidence_intervals.png", p, width=10, height=8)
+
+boots_summary_pr_y <- subset(boots_summary, variable %in% c("Pr[Y = pasture | S = pasture]", "Pr[Y = crops | S = crops]"))
+
+p <- ggplot(boots_summary_pr_y,
+            aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
+    geom_point() +
+    geom_errorbarh(height=0) +
+    scale_x_continuous('Pr[Y | S]') +
+    theme(axis.title.y=element_blank()) +
+    facet_wrap(~ variable, scales='free_x')
+ggsave("embrapa_bootstrap_pr_y_given_s_confidence_intervals.png", p, width=10, height=8)
 
 message("GBM test set confusion matrix:")
 print(gbm_test_confusion)
