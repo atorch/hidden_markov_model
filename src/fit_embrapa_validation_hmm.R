@@ -262,148 +262,47 @@ run_bootstrap <- function() {
     dtable_boot[, validation_landuse_coarse_next := c(tail(as.character(validation_landuse_coarse), .N-1), as.character(NA)), by="boot_index"]
     pr_transition_boot <- with(dtable_boot, prop.table(table(validation_landuse_coarse, validation_landuse_coarse_next), 1))
     pr_transition_boot_predictions <- with(dtable_boot, prop.table(table(predicted_landuse, predicted_landuse_next), 1))
-    prediction_confusion_matrix <- with(dtable_boot, prop.table(table(validation_landuse_coarse, predicted_landuse), margin=1))  # Compare to hmm_params_hat$pr_y
+    prediction_confusion_matrix <- with(dtable_boot, prop.table(table(validation_landuse_coarse, predicted_landuse), margin=1))
     list_of_hmm_params_hat <- lapply(initial_hmm_params, function(initial_hmm_params) {
         return(em_parameter_estimates_time_homogeneous(panel=panel_boot, params=initial_hmm_params, max_iter=50, epsilon=0.001))
     })
     hmm_params_hat <- list_of_hmm_params_hat[[which.max(sapply(list_of_hmm_params_hat, function(x) max(x$loglik)))]]  # Choose estimate with highest loglik
     hmm_params_hat$landuses <- levels(dtable$landuse_predicted)
 
-    ## TODO Could modify this return value to make summary stats dataframe easier to construct
-    return(list(pr_transition=pr_transition_boot,
-                pr_transition_predictions=pr_transition_boot_predictions,
-                hmm_params_hat=hmm_params_hat,
-                prediction_confusion_matrix=prediction_confusion_matrix))
+    df_pr_crops_pasture <- data.frame("variable"=c(rep("Crops to Pasture", 3)),
+                                      "estimator"=c("EM", "Frequency", "Ground Truth"),
+                                      "estimated_value"=c(hmm_params_hat$P[1, 2], pr_transition_boot_predictions[1, 2], pr_transition_boot[1, 2]))
+
+    df_pr_pasture_crops <- data.frame("variable"=c(rep("Pasture to Crops", 3)),
+                                      "estimator"=c("EM", "Frequency", "Ground Truth"),
+                                      "estimated_value"=c(hmm_params_hat$P[2, 1], pr_transition_boot_predictions[2, 1], pr_transition_boot[2, 1]))
+
+    return(rbind(df_pr_crops_pasture, df_pr_pasture_crops))
+
 }
 
 boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications_%s.rds",
                           opt$panel_length, opt$landuse_set, opt$n_bootstrap_samples, digest(points_train, algo="crc32"))
 
-boots <- replicate(opt$n_bootstrap_samples, run_bootstrap(), simplify=FALSE)
-saveRDS(boots, file=boots_filename)
+boots <- rbindlist(replicate(opt$n_bootstrap_samples, run_bootstrap(), simplify=FALSE))
+## saveRDS(boots, file=boots_filename)
 
-df_boots <- data.frame(replication_index=seq_along(boots))
-landuses <- unique(dtable$landuse_predicted_gbm)
-for(landuse in landuses) {
-    landuse_underscore <- gsub(" |-", "_", landuse)
-    varname_pr_transition <- sprintf("pr_%s_%s", landuse_underscore, landuse_underscore)
-    varname_pr_transition_predictions <- sprintf("predictions_pr_%s_%s", landuse_underscore, landuse_underscore)
-    varname_pr_transition_hmm <- sprintf("hmm_pr_%s_%s", landuse_underscore, landuse_underscore)
-    df_boots[, varname_pr_transition] <- sapply(boots, function(x) x$pr_transition[landuse, landuse])
-    df_boots[, varname_pr_transition_predictions] <- sapply(boots, function(x) x$pr_transition_predictions[landuse, landuse])
-    df_boots[, varname_pr_transition_hmm] <- sapply(boots, function(x) x$hmm_params$P[which(x$hmm_params$landuses == landuse),
-                                                                                      which(x$hmm_params$landuses == landuse)])
-    test_error <- sprintf("test_error_%s", landuse_underscore)
-    hmm_error  <- sprintf("hmm_misclassification_%s", landuse_underscore)
-    df_boots[, test_error] <- sapply(boots, function(x) {
-        return(1 - x$prediction_confusion_matrix[landuse, landuse])
-    })
-    df_boots[, hmm_error] <- sapply(boots, function(x) {
-        return(1 - x$hmm_params$pr_y[which(x$hmm_params$landuses == landuse),
-                                     which(x$hmm_params$landuses == landuse)])
-    })
-    ## Single transition probability plot showing both HMM and GBM
-    df_melted <- melt(subset(df_boots, select=c("replication_index", varname_pr_transition, varname_pr_transition_hmm, varname_pr_transition_predictions)),
-                      id.vars=c("replication_index", varname_pr_transition))
-    df_melted$label <- ifelse(grepl("^hmm", df_melted$variable), "HMM", "GBM predictions")
-    p <- (ggplot(df_melted, aes_string(x=varname_pr_transition, y="value")) +
-          geom_point() +
-          geom_abline(slope=1, intercept=0, linetype=2, color="grey", size=1.2) +
-          xlab(sprintf("probability of %s to %s transition in bootstrapped test data", landuse, landuse)) +
-          ylab("transition probability estimate") +
-          facet_wrap(~ label, ncol=2))
-    outfile <- sprintf("validation_%s_panel_%s_bootstrap_%s_transition_hmm_and_gbm_predictions.png",
-                       opt$panel_length, opt$landuse_set, landuse_underscore, landuse_underscore)
-    ggsave(outfile, p, width=10, height=8)
-    ## GBM test errors and HMM pr_y
-    p <- (ggplot(df_boots, aes_string(x=test_error, y=hmm_error)) +
-          geom_abline(slope=1, intercept=0, linetype=2, color="grey", size=1.2) +
-          xlab(sprintf("error rate for land use predictions in bootstrapped test data, given true land use is %s", landuse)) +
-          ylab("HMM estimate of error rate") +
-          geom_point())
-    outfile <- sprintf("validation_%s_panel_%s_bootstrap_%s_misclassification_probability.png",
-                       opt$panel_length, opt$landuse_set, landuse_underscore)
-    ggsave(outfile, p, width=10, height=8)
-}
-outfile <- sprintf("validation_bootstrap_%s_panel_%s_landuse_set_%s_replications.csv",
-                   opt$panel_length, opt$landuse_set, opt$n_bootstrap_samples)
-message("saving ", outfile)
-write.csv(df_boots, file=outfile, row.names=FALSE)
+boots_summary <- boots[, list("mean_estimated_value"=mean(estimated_value),
+                              "sd_estimated_value"=sd(estimated_value)),
+                       by=c("variable", "estimator")]
 
-message("mean ground truth Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$pr_crops_crops))
-message("mean ground truth Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$pr_pasture_pasture))
+boots_summary_pr <- subset(boots_summary, variable %in% c("Crops to Pasture", "Pasture to Crops"))
+boots_summary_pr$lb <- with(boots_summary_pr, mean_estimated_value - 1.96 * sd_estimated_value)
+boots_summary_pr$ub <- with(boots_summary_pr, mean_estimated_value + 1.96 * sd_estimated_value)
 
-message("sd ground truth Pr[S_it+1 = crops | S_it = crops] in boots: ", sd(df_boots$pr_crops_crops))
-message("sd ground truth Pr[S_it+1 = pasture | S_it = pasture] in boots: ", sd(df_boots$pr_pasture_pasture))
-
-message("mean HMM Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$hmm_pr_crops_crops))
-message("mean HMM Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$hmm_pr_pasture_pasture))
-
-message("sd HMM Pr[S_it+1 = crops | S_it = crops] in boots: ", sd(df_boots$hmm_pr_crops_crops))
-message("sd HMM Pr[S_it+1 = pasture | S_it = pasture] in boots: ", sd(df_boots$hmm_pr_pasture_pasture))
-
-message("mean Y_it frequency estimate Pr[S_it+1 = crops | S_it = crops] in boots: ", mean(df_boots$predictions_pr_crops_crops))
-message("mean Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in boots: ", mean(df_boots$predictions_pr_pasture_pasture))
-
-message("sd Y_it frequency estimate Pr[S_it+1 = crops | S_it = crops] in boots: ", sd(df_boots$predictions_pr_crops_crops))
-message("sd Y_it frequency estimate Pr[S_it+1 = pasture | S_it = pasture] in boots: ", sd(df_boots$predictions_pr_pasture_pasture))
-
-df_boots$replication_index <- NULL
-df_boots_means <- colMeans(df_boots)
-df_boots_sd <- apply(df_boots, MARGIN=2, FUN=sd)
-
-get_estimator_from_varname <- function(varname) {
-    if(str_starts(varname, "hmm_")) {
-        return("EM")
-    }
-    if(str_starts(varname, "predictions_")) {
-        return("Frequency")
-    }
-    return("Ground Truth")
-}
-
-get_variable_from_varname <- function(varname) {
-    if(str_detect(varname, "pasture_pasture")) {
-        return("Pasture to Pasture")
-    }
-    if(str_detect(varname, "crops_crops")) {
-        return("Crops to Crops")
-    }
-    ## TODO Misclassification Probs
-    return("Other")
-}
-
-df_boots_summary <- data.frame(varname=names(df_boots_means), pointEst=df_boots_means, sdBoot=df_boots_sd)
-df_boots_summary$estimator <- sapply(df_boots_summary$varname, get_estimator_from_varname)
-df_boots_summary$variable <- sapply(df_boots_summary$varname, get_variable_from_varname)
-
-## Plot of boostrap results (point estimates and confidence intervals)
-## TODO Rename "Observed" to "Ground Truth"?  Confusing because our Ys (the noisy classifications) are also observed,
-## and are the _only_ observations available in settings where no ground truth is available
-
-df_boots_summary_pr <- subset(df_boots_summary, variable != "Other")
-df_boots_summary_pr$lb <- with(df_boots_summary_pr, pointEst - 1.96 * sdBoot)
-df_boots_summary_pr$ub <- with(df_boots_summary_pr, pointEst + 1.96 * sdBoot)
-
-p <- ggplot(df_boots_summary_pr,
-            aes(x = pointEst, y = estimator, xmin = lb, xmax = ub)) +
+p <- ggplot(boots_summary_pr,
+            aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
     geom_point() +
     geom_errorbarh(height=0) +
     scale_x_continuous('Transition Rate') +
     theme(axis.title.y=element_blank()) +
     facet_wrap(~ variable, scales='free_x')
-
-rmse_frequency_pr_pasture_pasture <- with(df_boots, sqrt(mean((predictions_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
-rmse_hmm_pr_pasture_pasture <- with(df_boots, sqrt(mean((hmm_pr_pasture_pasture - pr_pasture_pasture) ^ 2)))
-message("RMSEs for Pr[S_it+1 = pasture | S_it = pasture]: HMM ", rmse_hmm_pr_pasture_pasture, ", frequency estimator ", rmse_frequency_pr_pasture_pasture)
-
-rmse_frequency_pr_crops_crops <- with(df_boots, sqrt(mean((predictions_pr_crops_crops - pr_crops_crops) ^ 2)))
-rmse_hmm_pr_crops_crops <- with(df_boots, sqrt(mean((hmm_pr_crops_crops - pr_crops_crops) ^ 2)))
-message("RMSEs for Pr[S_it+1 = crops | S_it = crops]: HMM ", rmse_hmm_pr_crops_crops, ", frequency estimator ", rmse_frequency_pr_crops_crops)
-
-rmse_hmm_miclassification_crops <- with(df_boots, sqrt(mean((hmm_misclassification_crops - test_error_crops) ^ 2)))
-rmse_hmm_miclassification_pasture <- with(df_boots, sqrt(mean((hmm_misclassification_pasture - test_error_pasture) ^ 2)))
-message("RMSEs for HMM estimates of misclassification probabilities (i.e. Pr[Y_it | S_it]): crops ", rmse_hmm_miclassification_crops, ", pasture ", rmse_hmm_miclassification_pasture)
+ggsave("embrapa_bootstrap_transition_probability_confidence_intervals.png", p, width=10, height=8)
 
 message("GBM test set confusion matrix:")
 print(gbm_test_confusion)
