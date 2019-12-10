@@ -253,6 +253,7 @@ run_bootstrap <- function() {
     estimates_time_varying <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, panel_boot)
 
     hmm_params_hat_time_varying <- estimates_time_varying$em_params_hat_best_likelihood
+    md_params_hat_time_varying <- estimates_time_varying$min_dist_params_hat_best_objfn
 
     transition_years <- seq(min(dtable$year), max(dtable$year) - 1)
     pr_transition_boot_time_varying <- lapply(transition_years, function(fixed_year) {
@@ -279,31 +280,56 @@ run_bootstrap <- function() {
                                                           pr_transition_boot[2, 1]))
 
     ## TODO Lapply over years instead of repeating code for first year, second year, etc
-    df_pr_pasture_crops_time_varying1 <- data.frame("variable"=rep("Pasture to Crops First Year", 3),
+    df_pr_pasture_crops_time_varying1 <- data.frame("variable"=rep("Pasture to Crops First Year", 4),
                                                     "time_homogeneous"=FALSE,
-                                                    "estimator"=c("EM", "Frequency", "Ground Truth"),
+                                                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                                                     "estimated_value"=c(hmm_params_hat_time_varying$P_list[[1]][2, 1],
+                                                                        md_params_hat_time_varying$P_list[[1]][2, 1],
                                                                         pr_transition_boot_predictions_time_varying[[1]][2, 1],
                                                                         pr_transition_boot_time_varying[[1]][2, 1]))
-    df_pr_pasture_crops_time_varying2 <- data.frame("variable"=rep("Pasture to Crops Second Year", 3),
+    df_pr_pasture_crops_time_varying2 <- data.frame("variable"=rep("Pasture to Crops Second Year", 4),
                                                     "time_homogeneous"=FALSE,
-                                                    "estimator"=c("EM", "Frequency", "Ground Truth"),
+                                                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                                                     "estimated_value"=c(hmm_params_hat_time_varying$P_list[[2]][2, 1],
+                                                                        md_params_hat_time_varying$P_list[[2]][2, 1],
                                                                         pr_transition_boot_predictions_time_varying[[2]][2, 1],
                                                                         pr_transition_boot_time_varying[[2]][2, 1]))
-
-    df_pr_crops_pasture_time_varying1 <- data.frame("variable"=rep("Crops to Pasture First Year", 3),
+    df_pr_pasture_crops_time_varying3 <- data.frame("variable"=rep("Pasture to Crops Third Year", 4),
                                                     "time_homogeneous"=FALSE,
-                                                    "estimator"=c("EM", "Frequency", "Ground Truth"),
+                                                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
+                                                    "estimated_value"=c(hmm_params_hat_time_varying$P_list[[3]][2, 1],
+                                                                        md_params_hat_time_varying$P_list[[3]][2, 1],
+                                                                        pr_transition_boot_predictions_time_varying[[3]][2, 1],
+                                                                        pr_transition_boot_time_varying[[3]][2, 1]))
+    df_pr_pasture_crops_time_varying4 <- data.frame("variable"=rep("Pasture to Crops Fourth Year", 4),
+                                                    "time_homogeneous"=FALSE,
+                                                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
+                                                    "estimated_value"=c(hmm_params_hat_time_varying$P_list[[4]][2, 1],
+                                                                        md_params_hat_time_varying$P_list[[4]][2, 1],
+                                                                        pr_transition_boot_predictions_time_varying[[4]][2, 1],
+                                                                        pr_transition_boot_time_varying[[4]][2, 1]))
+
+    df_pr_crops_pasture_time_varying1 <- data.frame("variable"=rep("Crops to Pasture First Year", 4),
+                                                    "time_homogeneous"=FALSE,
+                                                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                                                     "estimated_value"=c(hmm_params_hat_time_varying$P_list[[1]][2, 1],
+                                                                        md_params_hat_time_varying$P_list[[1]][2, 1],
                                                                         pr_transition_boot_predictions_time_varying[[1]][2, 1],
                                                                         pr_transition_boot_time_varying[[1]][2, 1]))
-    df_pr_crops_pasture_time_varying2 <- data.frame("variable"=rep("Crops to Pasture Second Year", 3),
+    df_pr_crops_pasture_time_varying2 <- data.frame("variable"=rep("Crops to Pasture Second Year", 4),
                                                     "time_homogeneous"=FALSE,
-                                                    "estimator"=c("EM", "Frequency", "Ground Truth"),
+                                                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                                                     "estimated_value"=c(hmm_params_hat_time_varying$P_list[[2]][1, 2],
+                                                                        md_params_hat_time_varying$P_list[[2]][1, 2],
                                                                         pr_transition_boot_predictions_time_varying[[2]][1, 2],
                                                                         pr_transition_boot_time_varying[[2]][1, 2]))
+    df_pr_crops_pasture_time_varying3 <- data.frame("variable"=rep("Crops to Pasture Second Year", 4),
+                                                    "time_homogeneous"=FALSE,
+                                                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
+                                                    "estimated_value"=c(hmm_params_hat_time_varying$P_list[[3]][1, 2],
+                                                                        md_params_hat_time_varying$P_list[[3]][1, 2],
+                                                                        pr_transition_boot_predictions_time_varying[[3]][1, 2],
+                                                                        pr_transition_boot_time_varying[[3]][1, 2]))
 
     df_pr_y_crops <- data.frame("variable"=rep("Pr[Y = crops | S = crops]", 2),
                                 "time_homogeneous"=TRUE,
@@ -321,8 +347,11 @@ run_bootstrap <- function() {
                  df_pr_y_pasture,
                  df_pr_pasture_crops_time_varying1,
                  df_pr_pasture_crops_time_varying2,
+                 df_pr_pasture_crops_time_varying3,
+                 df_pr_pasture_crops_time_varying4,
                  df_pr_crops_pasture_time_varying1,
-                 df_pr_crops_pasture_time_varying2))
+                 df_pr_crops_pasture_time_varying2,
+                 df_pr_crops_pasture_time_varying3))
 
 }
 
@@ -336,12 +365,18 @@ boots_summary <- boots[, list("mean_estimated_value"=mean(estimated_value),
                               "sd_estimated_value"=sd(estimated_value)),
                        by=c("variable", "estimator")]
 
+## TODO Cutoff at zero for lower bound?  pmax(0, ...)  Some of the CIs for transition probabilities include negative values
 boots_summary[, lb := mean_estimated_value - 1.96 * sd_estimated_value]
 boots_summary[, ub := mean_estimated_value + 1.96 * sd_estimated_value]
 
 boots_summary_P <- subset(boots_summary, variable %in% c("Crops to Pasture", "Pasture to Crops"))
-boots_summary_P_time_varying <- subset(boots_summary, variable %in% c("Pasture to Crops First Year", "Pasture to Crops Second Year",
-                                                                      "Crops to Pasture First Year", "Crops to Pasture Second Year"))
+boots_summary_P_time_varying <- subset(boots_summary, variable %in% c("Pasture to Crops First Year",
+                                                                      "Pasture to Crops Second Year",
+                                                                      "Pasture to Crops Third Year",
+                                                                      "Pasture to Crops Fourth Year",
+                                                                      "Crops to Pasture First Year",
+                                                                      "Crops to Pasture Second Year",
+                                                                      "Crops to Pasture Third Year"))
 
 p <- ggplot(boots_summary_P,
             aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
