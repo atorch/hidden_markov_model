@@ -210,8 +210,7 @@ lapply(seq_along(params0$P_list), function(time) {
 })
 
 ## Bootstrap panel, compute pr_transition, pr_transition_predictions and HMM estimates on each bootstrap sample
-## TODO Include MD in bootstrap
-## TODO Also include MD and EM with time-varying parameters?
+## TODO Is anything being run in parallel?  If not, speed it up!
 run_bootstrap <- function() {
     panel_indices <- seq_along(panel)
     resampled_panel_indices <- sort(sample(panel_indices, size=length(panel), replace=TRUE))  # Sample by point_id
@@ -262,6 +261,8 @@ run_bootstrap <- function() {
     pr_transition_boot_predictions_time_varying <- lapply(transition_years, function(fixed_year) {
         with(subset(dtable_boot, year == fixed_year), prop.table(table(predicted_landuse, predicted_landuse_next), 1))
     })
+
+    ## TODO Run viterbi with time-varying transition probs, record improvement in classification accuracy
 
     df_pr_crops_pasture <- data.frame("variable"=rep("Crops to Pasture", 4),
                                       "time_homogeneous"=TRUE,
@@ -323,13 +324,20 @@ run_bootstrap <- function() {
                                                                         md_params_hat_time_varying$P_list[[2]][1, 2],
                                                                         pr_transition_boot_predictions_time_varying[[2]][1, 2],
                                                                         pr_transition_boot_time_varying[[2]][1, 2]))
-    df_pr_crops_pasture_time_varying3 <- data.frame("variable"=rep("Crops to Pasture Second Year", 4),
+    df_pr_crops_pasture_time_varying3 <- data.frame("variable"=rep("Crops to Pasture Third Year", 4),
                                                     "time_homogeneous"=FALSE,
                                                     "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                                                     "estimated_value"=c(hmm_params_hat_time_varying$P_list[[3]][1, 2],
                                                                         md_params_hat_time_varying$P_list[[3]][1, 2],
                                                                         pr_transition_boot_predictions_time_varying[[3]][1, 2],
                                                                         pr_transition_boot_time_varying[[3]][1, 2]))
+    df_pr_crops_pasture_time_varying4 <- data.frame("variable"=rep("Crops to Pasture Fourth Year", 4),
+                                                    "time_homogeneous"=FALSE,
+                                                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
+                                                    "estimated_value"=c(hmm_params_hat_time_varying$P_list[[4]][1, 2],
+                                                                        md_params_hat_time_varying$P_list[[4]][1, 2],
+                                                                        pr_transition_boot_predictions_time_varying[[4]][1, 2],
+                                                                        pr_transition_boot_time_varying[[4]][1, 2]))
 
     df_pr_y_crops <- data.frame("variable"=rep("Pr[Y = crops | S = crops]", 2),
                                 "time_homogeneous"=TRUE,
@@ -351,7 +359,8 @@ run_bootstrap <- function() {
                  df_pr_pasture_crops_time_varying4,
                  df_pr_crops_pasture_time_varying1,
                  df_pr_crops_pasture_time_varying2,
-                 df_pr_crops_pasture_time_varying3))
+                 df_pr_crops_pasture_time_varying3,
+                 df_pr_crops_pasture_time_varying4))
 
 }
 
@@ -376,7 +385,8 @@ boots_summary_P_time_varying <- subset(boots_summary, variable %in% c("Pasture t
                                                                       "Pasture to Crops Fourth Year",
                                                                       "Crops to Pasture First Year",
                                                                       "Crops to Pasture Second Year",
-                                                                      "Crops to Pasture Third Year"))
+                                                                      "Crops to Pasture Third Year",
+                                                                      "Crops to Pasture Fourth Year"))
 
 p <- ggplot(boots_summary_P,
             aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
@@ -386,6 +396,8 @@ p <- ggplot(boots_summary_P,
     theme(axis.title.y=element_blank()) +
     facet_wrap(~ variable, scales='free_x')
 ggsave("embrapa_bootstrap_transition_probability_time_homogeneous_confidence_intervals.png", p, width=10, height=8)
+
+## TODO Also plot CIs for errors for EM, MD and Frequency (relative to ground truth)
 
 p <- ggplot(boots_summary_P_time_varying,
             aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
