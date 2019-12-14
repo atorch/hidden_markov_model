@@ -3,6 +3,7 @@ library(digest)
 library(gbm)
 library(ggplot2)
 library(optparse)
+library(parallel)
 library(plyr); library(dplyr)  # For bind_rows
 library(randomForest)
 library(Rsolnp)
@@ -210,8 +211,8 @@ lapply(seq_along(params0$P_list), function(time) {
 })
 
 ## Bootstrap panel, compute pr_transition, pr_transition_predictions and HMM estimates on each bootstrap sample
-## TODO Is anything being run in parallel?  If not, speed it up!  ## TODO
 run_bootstrap <- function() {
+    require(data.table)
     panel_indices <- seq_along(panel)
     resampled_panel_indices <- sort(sample(panel_indices, size=length(panel), replace=TRUE))  # Sample by point_id
 
@@ -325,10 +326,41 @@ run_bootstrap <- function() {
 
 }
 
+num_cores <- detectCores()
+cluster <- makeCluster(num_cores)  # Call stopCluster when done
+
+clusterExport(cluster, c("baum_welch",
+                         "baum_welch_time_homogeneous",
+                         "dtable",
+                         "em_parameter_estimates_time_homogeneous",
+                         "eq_function_minimum_distance",
+                         "eq_function_min_dist_time_homogeneous",
+                         "get_expectation_maximization_estimates",
+                         "get_hmm_and_minimum_distance_estimates_random_initialization",
+                         "get_min_distance_estimates",
+                         "get_min_distance_estimates_time_homogeneous",
+                         "get_minimum_distance_estimates_random_initialization_time_homogeneous",
+                         "get_random_initial_parameters",
+                         "get_transition_probs_from_M_S_joint",
+                         "initial_hmm_params",
+                         "is_diag_dominant",
+                         "objfn_minimum_distance",
+                         "objfn_min_dist_time_homogeneous",
+                         "panel",
+                         "run_bootstrap",
+                         "valid_panel_element",
+                         "valid_parameters",
+                         "valid_parameters_time_homogeneous"))
+
+boots <- parLapply(cluster, seq_len(opt$n_bootstrap_samples), function(unused_input) {
+    run_bootstrap()
+})
+boots <- rbindlist(boots)
+
+stopCluster(cluster)
+
 boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_replications_%s.rds",
                           opt$panel_length, opt$n_bootstrap_samples, digest(points_train, algo="crc32"))
-
-boots <- rbindlist(replicate(opt$n_bootstrap_samples, run_bootstrap(), simplify=FALSE))
 ## saveRDS(boots, file=boots_filename)
 
 boots_summary <- boots[, list("mean_estimated_value"=mean(estimated_value),
