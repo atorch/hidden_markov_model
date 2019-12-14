@@ -257,17 +257,24 @@ run_bootstrap <- function() {
 
     ## Run Viterbi and see whether test performance beats raw GBM
     ## TODO Both EM and MD
-    viterbi_paths <- lapply(panel, viterbi_path, params=hmm_params_hat_time_varying)
+    viterbi_paths_time_varying <- lapply(panel_boot, viterbi_path, params=hmm_params_hat_time_varying)
+    dtable_boot$viterbi_landuse_time_varying <- levels(dtable$landuse_predicted)[c(viterbi_paths_time_varying, recursive=TRUE)]
+
+    viterbi_paths <- lapply(panel_boot, viterbi_path_time_homogeneous, params=hmm_params_hat)
     dtable_boot$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recursive=TRUE)]
 
-    gbm_accuracy <- mean(dtable_boot$landuse_predicted_gbm == dtable_boot$validation_landuse_coarse)
-    viterbi_accuracy <- mean(dtable_boot$viterbi_landuse == dtable_boot$validation_landuse_coarse)
+    gbm_accuracy <- mean(dtable_boot$predicted_landuse == dtable_boot$validation_landuse_coarse, na.rm=TRUE)
+    viterbi_accuracy_time_varying <- mean(dtable_boot$viterbi_landuse_time_varying == dtable_boot$validation_landuse_coarse, na.rm=TRUE)
+    viterbi_accuracy <- mean(dtable_boot$viterbi_landuse == dtable_boot$validation_landuse_coarse, na.rm=TRUE)
 
-    df_classification_accuracy <- data.frame("variable"=rep("Classification Accuracy", 2),
+    ## TODO May need to adjust this dataframe to make the Classification Accuracy plot easier to read
+    df_classification_accuracy <- data.frame("variable"="Classification Accuracy",
                                              "transition_year"="All Years",
-                                             "estimator_type"="Time Varying",
-                                             "estimator"=c("GBM", "GBM with HMM Correction (Viterbi)"),
-                                             "estimated_value"=c(gbm_accuracy, viterbi_accuracy))
+                                             "estimator_type"=c("", "Time Homogeneous", "Time Varying"),
+                                             "estimator"=c("GBM",
+                                                           "GBM with Time Homogeneous HMM Correction (Viterbi)",
+                                                           "GBM with Time Varying HMM Correction (Viterbi)"),
+                                             "estimated_value"=c(gbm_accuracy, viterbi_accuracy, viterbi_accuracy_time_varying))
 
     transition_years <- seq(min(dtable$year), max(dtable$year) - 1)
 
@@ -390,7 +397,8 @@ clusterExport(cluster, c("baum_welch",
                          "valid_panel_element",
                          "valid_parameters",
                          "valid_parameters_time_homogeneous",
-                         "viterbi_path"))
+                         "viterbi_path",
+                         "viterbi_path_time_homogeneous"))
 
 boots <- parLapply(cluster, seq_len(opt$n_bootstrap_samples), function(unused_input) {
     run_bootstrap()
@@ -414,6 +422,16 @@ boots_summary[, ub := mean_estimated_value + 1.96 * sd_estimated_value]
 boots_summary_P <- subset(boots_summary, estimator_type == "Time Homogeneous" & variable %in% c("Crops to Pasture", "Pasture to Crops"))
 boots_summary_P_time_varying <- subset(boots_summary, estimator_type == "Time Varying" & variable %in% c("Crops to Pasture", "Pasture to Crops"))
 
+boots_summary_accuracy <- subset(boots_summary, variable == "Classification Accuracy")
+
+p <- ggplot(boots_summary_accuracy,
+            aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
+    geom_point() +
+    geom_errorbarh(height=0) +
+    scale_x_continuous('Classification Accuracy') +
+    theme(axis.title.y=element_blank())
+ggsave("embrapa_bootstrap_classification_accuracy_confidence_intervals.png", width=10, height=8)
+
 p <- ggplot(boots_summary_P,
             aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
     geom_point() +
@@ -431,8 +449,8 @@ p <- ggplot(boots_summary_P_time_varying,
     geom_errorbarh(height=0) +
     scale_x_continuous('Transition Rate') +
     theme(axis.title.y=element_blank()) +
-    facet_grid(variable ~ transition_year, scales='free_x')
-ggsave("embrapa_bootstrap_transition_probability_time_varying_confidence_intervals.png", p, width=12, height=8)
+    facet_grid(transition_year ~ variable, scales='free')
+ggsave("embrapa_bootstrap_transition_probability_time_varying_confidence_intervals.png", p, width=10, height=12)
 
 boots_summary_pr_y <- subset(boots_summary, variable %in% c("Pr[Y = pasture | S = pasture]", "Pr[Y = crops | S = crops]"))
 
