@@ -255,6 +255,20 @@ run_bootstrap <- function() {
     hmm_params_hat_time_varying <- estimates_time_varying$em_params_hat_best_likelihood
     md_params_hat_time_varying <- estimates_time_varying$min_dist_params_hat_best_objfn
 
+    ## Run Viterbi and see whether test performance beats raw GBM
+    ## TODO Both EM and MD
+    viterbi_paths <- lapply(panel, viterbi_path, params=hmm_params_hat_time_varying)
+    dtable_boot$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recursive=TRUE)]
+
+    gbm_accuracy <- mean(dtable_boot$landuse_predicted_gbm == dtable_boot$validation_landuse_coarse)
+    viterbi_accuracy <- mean(dtable_boot$viterbi_landuse == dtable_boot$validation_landuse_coarse)
+
+    df_classification_accuracy <- data.frame("variable"=rep("Classification Accuracy", 2),
+                                             "transition_year"="All Years",
+                                             "estimator_type"="Time Varying",
+                                             "estimator"=c("GBM", "GBM with HMM Correction (Viterbi)"),
+                                             "estimated_value"=c(gbm_accuracy, viterbi_accuracy))
+
     transition_years <- seq(min(dtable$year), max(dtable$year) - 1)
 
     pr_transition_boot_time_varying <- lapply(transition_years, function(fixed_year) {
@@ -267,7 +281,8 @@ run_bootstrap <- function() {
     ## TODO Run viterbi with time-varying transition probs, record improvement in classification accuracy
 
     df_pr_crops_pasture <- data.frame("variable"=rep("Crops to Pasture", 4),
-                                      "time_homogeneous"=TRUE,
+                                      "transition_year"="All Years",
+                                      "estimator_type"="Time Homogeneous",
                                       "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                                       "estimated_value"=c(hmm_params_hat$P[1, 2],
                                                           md_params_hat$P[1, 2],
@@ -275,7 +290,8 @@ run_bootstrap <- function() {
                                                           pr_transition_boot[1, 2]))
 
     df_pr_pasture_crops <- data.frame("variable"=rep("Pasture to Crops", 4),
-                                      "time_homogeneous"=TRUE,
+                                      "transition_year"="All Years",
+                                      "estimator_type"="Time Homogeneous",
                                       "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                                       "estimated_value"=c(hmm_params_hat$P[2, 1],
                                                           md_params_hat$P[2, 1],
@@ -283,10 +299,10 @@ run_bootstrap <- function() {
                                                           pr_transition_boot[2, 1]))
 
     df_pr_pasture_crops_time_varying <- do.call(rbind, lapply(transition_years, function(fixed_year) {
-        varname <- paste0("Pasture to Crops ", fixed_year, "-", fixed_year + 1)
         index <- which(transition_years == fixed_year)
-        data.frame("variable"=rep(varname, 4),
-                   "time_homogeneous"=FALSE,
+        data.frame("variable"=rep("Pasture to Crops", 4),
+                   "transition_year"=rep(paste0(fixed_year, "-", fixed_year + 1), 4),
+                   "estimator_type"="Time Varying",
                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                    "estimated_value"=c(hmm_params_hat_time_varying$P_list[[index]][2, 1],
                                        md_params_hat_time_varying$P_list[[index]][2, 1],
@@ -295,10 +311,10 @@ run_bootstrap <- function() {
     }))
 
     df_pr_crops_pasture_time_varying <- do.call(rbind, lapply(transition_years, function(fixed_year) {
-        varname <- paste0("Crops to Pasture ", fixed_year, "-", fixed_year + 1)
         index <- which(transition_years == fixed_year)
-        data.frame("variable"=rep(varname, 4),
-                   "time_homogeneous"=FALSE,
+        data.frame("variable"=rep("Crops to Pasture", 4),
+                   "transition_year"=rep(paste0(fixed_year, "-", fixed_year + 1), 4),
+                   "estimator_type"="Time Varying",
                    "estimator"=c("EM", "MD", "Frequency", "Ground Truth"),
                    "estimated_value"=c(hmm_params_hat_time_varying$P_list[[index]][1, 2],
                                        md_params_hat_time_varying$P_list[[index]][1, 2],
@@ -306,14 +322,34 @@ run_bootstrap <- function() {
                                        pr_transition_boot_time_varying[[index]][1, 2]))
     }))
 
-    ## TODO Pr[ Y | S] for time-varying models, both EM and MD
+    ## Estimated Pr[Y=crops | S=crops] for models in which transition probabilities are time-varying
+    df_pr_y_crops_time_varying <- data.frame("variable"=rep("Pr[Y = crops | S = crops]", 3),
+                                             "transition_year"="",
+                                             "estimator_type"="Time Varying",
+                                             "estimator"=c("EM", "MD", "Ground Truth"),
+                                             "estimated_value"=c(hmm_params_hat_time_varying$pr_y[1, 1],
+                                                                 md_params_hat_time_varying$pr_y[1, 1],
+                                                                 prediction_confusion_matrix[1, 1]))
+
+    ## Estimated Pr[Y=pasture | S=pasture] for models in which transition probabilities are time-varying
+    df_pr_y_pasture_time_varying <- data.frame("variable"=rep("Pr[Y = pasture | S = pasture]", 3),
+                                               "transition_year"="",
+                                               "estimator_type"="Time Varying",
+                                               "estimator"=c("EM", "MD", "Ground Truth"),
+                                               "estimated_value"=c(hmm_params_hat_time_varying$pr_y[2, 2],
+                                                                   md_params_hat_time_varying$pr_y[2, 2],
+                                                                   prediction_confusion_matrix[2, 2]))
+
+    ## TODO Add MD Pr[Y | S]
     df_pr_y_crops <- data.frame("variable"=rep("Pr[Y = crops | S = crops]", 2),
-                                "time_homogeneous"=TRUE,
+                                "transition_year"="",
+                                "estimator_type"="Time Homogeneous",
                                 "estimator"=c("EM", "Ground Truth"),
                                 "estimated_value"=c(hmm_params_hat$pr_y[1, 1], prediction_confusion_matrix[1, 1]))
 
     df_pr_y_pasture <- data.frame("variable"=rep("Pr[Y = pasture | S = pasture]", 2),
-                                  "time_homogeneous"=TRUE,
+                                  "transition_year"="",
+                                  "estimator_type"="Time Homogeneous",
                                   "estimator"=c("EM", "Ground Truth"),
                                   "estimated_value"=c(hmm_params_hat$pr_y[2, 2], prediction_confusion_matrix[2, 2]))
 
@@ -321,8 +357,11 @@ run_bootstrap <- function() {
                  df_pr_pasture_crops,
                  df_pr_y_crops,
                  df_pr_y_pasture,
+                 df_pr_y_crops_time_varying,
+                 df_pr_y_pasture_time_varying,
                  df_pr_pasture_crops_time_varying,
-                 df_pr_crops_pasture_time_varying))
+                 df_pr_crops_pasture_time_varying,
+                 df_classification_accuracy))
 
 }
 
@@ -350,7 +389,8 @@ clusterExport(cluster, c("baum_welch",
                          "run_bootstrap",
                          "valid_panel_element",
                          "valid_parameters",
-                         "valid_parameters_time_homogeneous"))
+                         "valid_parameters_time_homogeneous",
+                         "viterbi_path"))
 
 boots <- parLapply(cluster, seq_len(opt$n_bootstrap_samples), function(unused_input) {
     run_bootstrap()
@@ -365,16 +405,14 @@ boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_replications_%s.rds"
 
 boots_summary <- boots[, list("mean_estimated_value"=mean(estimated_value),
                               "sd_estimated_value"=sd(estimated_value)),
-                       by=c("variable", "estimator", "time_homogeneous")]
+                       by=c("variable", "estimator", "estimator_type", "transition_year")]
 
 ## TODO Cutoff at zero for lower bound?  pmax(0, ...)  Some of the CIs for transition probabilities include negative values
 boots_summary[, lb := mean_estimated_value - 1.96 * sd_estimated_value]
 boots_summary[, ub := mean_estimated_value + 1.96 * sd_estimated_value]
 
-boots_summary_P <- subset(boots_summary, variable %in% c("Crops to Pasture", "Pasture to Crops"))
-
-variables_time_varying_transitions <- unique(boots_summary$variable[grepl("[A-z]* to [A-z]* [0-9]{4}-[0-9]{4}", boots_summary$variable)])
-boots_summary_P_time_varying <- subset(boots_summary, variable %in% variables_time_varying_transitions)
+boots_summary_P <- subset(boots_summary, estimator_type == "Time Homogeneous" & variable %in% c("Crops to Pasture", "Pasture to Crops"))
+boots_summary_P_time_varying <- subset(boots_summary, estimator_type == "Time Varying" & variable %in% c("Crops to Pasture", "Pasture to Crops"))
 
 p <- ggplot(boots_summary_P,
             aes(x = mean_estimated_value, y = estimator, xmin = lb, xmax = ub)) +
@@ -393,8 +431,8 @@ p <- ggplot(boots_summary_P_time_varying,
     geom_errorbarh(height=0) +
     scale_x_continuous('Transition Rate') +
     theme(axis.title.y=element_blank()) +
-    facet_wrap(~ variable, scales='free_x')
-ggsave("embrapa_bootstrap_transition_probability_time_varying_confidence_intervals.png", p, width=10, height=8)
+    facet_grid(variable ~ transition_year, scales='free_x')
+ggsave("embrapa_bootstrap_transition_probability_time_varying_confidence_intervals.png", p, width=12, height=8)
 
 boots_summary_pr_y <- subset(boots_summary, variable %in% c("Pr[Y = pasture | S = pasture]", "Pr[Y = crops | S = crops]"))
 
@@ -404,7 +442,7 @@ p <- ggplot(boots_summary_pr_y,
     geom_errorbarh(height=0) +
     scale_x_continuous('Pr[Y | S]') +
     theme(axis.title.y=element_blank()) +
-    facet_wrap(~ variable, scales='free_x')
+    facet_grid(estimator_type ~ variable, scales='free_x')
 ggsave("embrapa_bootstrap_pr_y_given_s_confidence_intervals.png", p, width=10, height=8)
 
 message("GBM test set confusion matrix:")
