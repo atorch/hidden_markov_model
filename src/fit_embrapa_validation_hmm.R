@@ -289,6 +289,14 @@ run_bootstrap <- function() {
 
     ## TODO Run viterbi with time-varying transition probs, record improvement in classification accuracy
 
+    df_pr_crops_pasture_errors <- data.frame("variable"="Crops to Pasture",
+                                             "transition_year"="All Years",
+                                             "estimator_type"="Time Homogeneous (Errors Relative to Ground Truth)",
+                                             "estimator"=c("EM", "MD", "Frequency"),
+                                             "estimated_value"=c(hmm_params_hat$P[1, 2] - pr_transition_boot[1, 2],
+                                                                 md_params_hat$P[1, 2] - pr_transition_boot[1, 2],
+                                                                 pr_transition_boot_predictions[1, 2] - pr_transition_boot[1, 2]))
+
     df_pr_crops_pasture <- data.frame("variable"="Crops to Pasture",
                                       "transition_year"="All Years",
                                       "estimator_type"="Time Homogeneous",
@@ -297,6 +305,14 @@ run_bootstrap <- function() {
                                                           md_params_hat$P[1, 2],
                                                           pr_transition_boot_predictions[1, 2],
                                                           pr_transition_boot[1, 2]))
+
+    df_pr_pasture_crops_errors <- data.frame("variable"="Pasture to Crops",
+                                             "transition_year"="All Years",
+                                             "estimator_type"="Time Homogeneous (Errors Relative to Ground Truth)",
+                                             "estimator"=c("EM", "MD", "Frequency"),
+                                             "estimated_value"=c(hmm_params_hat$P[2, 1] - pr_transition_boot[2, 1],
+                                                                 md_params_hat$P[2, 1] - pr_transition_boot[2, 1],
+                                                                 pr_transition_boot_predictions[2, 1] - pr_transition_boot[2, 1]))
 
     df_pr_pasture_crops <- data.frame("variable"="Pasture to Crops",
                                       "transition_year"="All Years",
@@ -384,7 +400,9 @@ run_bootstrap <- function() {
                                   "estimator"=c("EM", "Ground Truth"),
                                   "estimated_value"=c(hmm_params_hat$pr_y[2, 2], prediction_confusion_matrix[2, 2]))
 
-    return(rbind(df_pr_crops_pasture,
+    return(rbind(df_pr_crops_pasture_errors,
+                 df_pr_crops_pasture,
+                 df_pr_pasture_crops_errors,
                  df_pr_pasture_crops,
                  df_pr_y_crops,
                  df_pr_y_pasture,
@@ -452,6 +470,7 @@ boots_summary[, ub := mean_estimated_value + 1.96 * sd_estimated_value]
 boots_summary_P <- subset(boots_summary, estimator_type == "Time Homogeneous" & variable %in% c("Crops to Pasture", "Pasture to Crops"))
 boots_summary_P_time_varying <- subset(boots_summary, estimator_type == "Time Varying" & variable %in% c("Crops to Pasture", "Pasture to Crops"))
 
+boots_summary_P_errors <- subset(boots_summary, estimator_type == "Time Homogeneous (Errors Relative to Ground Truth)")
 boots_summary_P_time_varying_errors <- subset(boots_summary, estimator_type == "Time Varying (Errors Relative to Ground Truth)")
 
 boots_summary_accuracy <- subset(boots_summary, variable == "Classification Accuracy")
@@ -463,6 +482,16 @@ p <- ggplot(boots_summary_accuracy,
     scale_x_continuous('Classification Accuracy') +
     theme(axis.title.y=element_blank())
 ggsave("embrapa_bootstrap_classification_accuracy_confidence_intervals.png", width=10, height=8)
+
+p <- ggplot(boots_summary_P_errors,
+            aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
+    geom_point() +
+    geom_errorbarh(height=0) +
+    scale_x_continuous('Error in Estimated Transition Rate') +
+    theme(axis.title.y=element_blank()) +
+    facet_wrap(~ variable, scales='free_x') +
+    geom_vline(xintercept = 0, linetype=2)
+ggsave("embrapa_bootstrap_transition_probability_time_homogeneous_errors_confidence_intervals.png", p, width=10, height=8)
 
 p <- ggplot(boots_summary_P,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
