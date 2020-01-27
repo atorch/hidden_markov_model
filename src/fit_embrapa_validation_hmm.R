@@ -387,18 +387,21 @@ run_bootstrap <- function() {
                                                                    md_params_hat_time_varying$pr_y[2, 2],
                                                                    prediction_confusion_matrix[2, 2]))
 
-    ## TODO Add MD Pr[Y | S]
     df_pr_y_crops <- data.frame("variable"="Pr[Y = crops | S = crops]",
                                 "transition_year"="",
                                 "estimator_type"="Time Homogeneous",
-                                "estimator"=c("EM", "Ground Truth"),
-                                "estimated_value"=c(hmm_params_hat$pr_y[1, 1], prediction_confusion_matrix[1, 1]))
+                                "estimator"=c("EM", "MD", "Ground Truth"),
+                                "estimated_value"=c(hmm_params_hat$pr_y[1, 1],
+                                                    md_params_hat$pr_y[1, 1],
+                                                    prediction_confusion_matrix[1, 1]))
 
     df_pr_y_pasture <- data.frame("variable"="Pr[Y = pasture | S = pasture]",
                                   "transition_year"="",
                                   "estimator_type"="Time Homogeneous",
-                                  "estimator"=c("EM", "Ground Truth"),
-                                  "estimated_value"=c(hmm_params_hat$pr_y[2, 2], prediction_confusion_matrix[2, 2]))
+                                  "estimator"=c("EM", "MD", "Ground Truth"),
+                                  "estimated_value"=c(hmm_params_hat$pr_y[2, 2],
+                                                      md_params_hat$pr_y[2, 2],
+                                                      prediction_confusion_matrix[2, 2]))
 
     return(rbind(df_pr_crops_pasture_errors,
                  df_pr_crops_pasture,
