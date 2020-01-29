@@ -12,7 +12,7 @@ library(stringr)
 
 set.seed(789)
 
-opt_list <- list(make_option("--n_bootstrap_samples", default=100, type=("integer")),
+opt_list <- list(make_option("--n_bootstrap_samples", default=200, type=("integer")),
                  make_option("--panel_length", default="short"),
                  make_option("--classifier_training_fraction", default=0.15, type="double"),
                  make_option("--classifier_pasture_fraction", default=0.6, type="double",
@@ -484,7 +484,7 @@ p <- ggplot(boots_summary_accuracy,
     geom_errorbarh(height=0) +
     scale_x_continuous('Classification Accuracy') +
     theme(axis.title.y=element_blank())
-ggsave("embrapa_bootstrap_classification_accuracy_confidence_intervals.png", width=10, height=8)
+ggsave("embrapa_bootstrap_classification_accuracy_confidence_intervals.png", width=8, height=6)
 
 p <- ggplot(boots_summary_P_errors,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
@@ -494,7 +494,7 @@ p <- ggplot(boots_summary_P_errors,
     theme(axis.title.y=element_blank()) +
     facet_wrap(~ variable, scales='free_x') +
     geom_vline(xintercept = 0, linetype=2)
-ggsave("embrapa_bootstrap_transition_probability_time_homogeneous_errors_confidence_intervals.png", p, width=10, height=8)
+ggsave("embrapa_bootstrap_transition_probability_time_homogeneous_errors_confidence_intervals.png", p, width=8, height=6)
 
 p <- ggplot(boots_summary_P,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
@@ -503,7 +503,7 @@ p <- ggplot(boots_summary_P,
     scale_x_continuous('Transition Rate') +
     theme(axis.title.y=element_blank()) +
     facet_wrap(~ variable, scales='free_x')
-ggsave("embrapa_bootstrap_transition_probability_time_homogeneous_confidence_intervals.png", p, width=10, height=8)
+ggsave("embrapa_bootstrap_transition_probability_time_homogeneous_confidence_intervals.png", p, width=8, height=6)
 
 p <- ggplot(boots_summary_P_time_varying_errors,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
@@ -513,7 +513,7 @@ p <- ggplot(boots_summary_P_time_varying_errors,
     theme(axis.title.y=element_blank()) +
     facet_grid(transition_year ~ variable, scales='free') +
     geom_vline(xintercept = 0, linetype=2)
-ggsave("embrapa_bootstrap_transition_probability_time_varying_errors_confidence_intervals.png", p, width=10, height=12)
+ggsave("embrapa_bootstrap_transition_probability_time_varying_errors_confidence_intervals.png", p, width=8, height=10)
 
 p <- ggplot(boots_summary_P_time_varying,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
@@ -522,7 +522,7 @@ p <- ggplot(boots_summary_P_time_varying,
     scale_x_continuous('Transition Rate') +
     theme(axis.title.y=element_blank()) +
     facet_grid(transition_year ~ variable, scales='free')
-ggsave("embrapa_bootstrap_transition_probability_time_varying_confidence_intervals.png", p, width=10, height=12)
+ggsave("embrapa_bootstrap_transition_probability_time_varying_confidence_intervals.png", p, width=8, height=10)
 
 boots_summary_pr_y <- subset(boots_summary, variable %in% c("Pr[Y = pasture | S = pasture]", "Pr[Y = crops | S = crops]"))
 
@@ -533,7 +533,7 @@ p <- ggplot(boots_summary_pr_y,
     scale_x_continuous('Pr[Y | S]') +
     theme(axis.title.y=element_blank()) +
     facet_grid(estimator_type ~ variable, scales='free_x')
-ggsave("embrapa_bootstrap_pr_y_given_s_confidence_intervals.png", p, width=10, height=8)
+ggsave("embrapa_bootstrap_pr_y_given_s_confidence_intervals.png", p, width=8, height=6)
 
 message("GBM test set confusion matrix:")
 print(gbm_test_confusion)
