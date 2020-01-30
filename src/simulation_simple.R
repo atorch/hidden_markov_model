@@ -191,3 +191,6 @@ max(abs(c(min_dist_params2_hat_population$P_list, recursive=TRUE) - c(params0$P_
 
 ## Recover the initial distribution
 min_dist_params2_hat_population$mu - params0$mu
+
+## TODO Make sure this also works for time homogeneous MD code
+## (i.e. recover true parameters when using population values of M matrices)
