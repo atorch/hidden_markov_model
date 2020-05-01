@@ -111,6 +111,8 @@ M_S_joint_population <- lapply(seq_along(params0$P_list), function(time_index) {
     stopifnot(isTRUE(all.equal(sum(mu_t), 1)))  # Valid probability distribution, careful comparing floats
     return(t(params0$P_list[[time_index]] * matrix(mu_t, length(mu_t), length(mu_t))))
 })
+
+## TODO What is M_Y_joint_population versus M_Y_joint_hat_population?  Same thing?
 M_Y_joint_population <- lapply(M_S_joint_population, function(M) {
     return(t(params0$pr_y) %*% M %*% params0$pr_y)
 })
@@ -180,7 +182,6 @@ max(abs(c(min_dist_params1_hat_population$P_list, recursive=TRUE) - c(params0$P_
 min_dist_params1_hat_population$objfn_values
 
 ## Try again with population, now starting the optimization from params2 ("more incorrect" than params1)
-## Note convergence code of 2 and "Solution not reliable....Problem Inverting Hessian" warning
 min_dist_params2_hat_population <- get_min_distance_estimates(params2, M_Y_joint_hat_population, M_Y_joint_hat_inverse_population, M_fixed_y_Y_joint_hat_population, dtable)
 
 ## Optimizer should get the distance (objective function) down to zero also when starting from params2
@@ -192,5 +193,27 @@ max(abs(c(min_dist_params2_hat_population$P_list, recursive=TRUE) - c(params0$P_
 ## Recover the initial distribution
 min_dist_params2_hat_population$mu - params0$mu
 
-## TODO Make sure this also works for time homogeneous MD code
+## Make sure this also works for time homogeneous MD code
 ## (i.e. recover true parameters when using population values of M matrices)
+params_time_homogeneous <- params0
+params_time_homogeneous$P <- params0$P_list[[1]]
+params_time_homogeneous$P_list <- NULL
+
+dtable[, year := time]
+
+M_S_joint_population_time_homogeneous <- lapply(seq_along(params0$P_list), function(time_index) {
+    if(time_index == 1) {
+        mu_t <- params_time_homogeneous$mu  # Equals initial distribution when t=1
+    } else {
+        mu_t <- params_time_homogeneous$mu %*% Reduce("%*%", rep(list(params_time_homogeneous$P), time_index- 1))
+    }
+    stopifnot(isTRUE(all.equal(sum(mu_t), 1)))  # Valid probability distribution, careful comparing floats
+    return(t(params_time_homogeneous$P * matrix(mu_t, length(mu_t), length(mu_t))))
+})
+
+M_Y_joint_population_time_homogeneous <- lapply(M_S_joint_population, function(M) {
+    return(t(params_time_homogeneous$pr_y) %*% M %*% params_time_homogeneous$pr_y)
+})
+
+
+get_min_distance_estimates_time_homogeneous(params_time_homogeneous, M_Y_joint_hat_population_time_homogeneous, M_Y_joint_hat_inverse_population_time_homogeneous, M_fixed_y_Y_joint_hat_population_time_homogeneous, dtable)
