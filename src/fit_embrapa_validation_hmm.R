@@ -12,7 +12,8 @@ library(stringr)
 
 set.seed(789)
 
-opt_list <- list(make_option("--n_bootstrap_samples", default=200, type=("integer")),
+opt_list <- list(make_option("--n_bootstrap_samples", default=200, type="integer"),
+                 make_option("--subsample_size", default=66, type="integer"),
                  make_option("--panel_length", default="short"),
                  make_option("--classifier_training_fraction", default=0.15, type="double"),
                  make_option("--classifier_pasture_fraction", default=0.6, type="double",
@@ -206,10 +207,12 @@ lapply(seq_along(params0$P_list), function(time) {
 })
 
 ## Bootstrap panel, compute pr_transition, pr_transition_predictions and HMM estimates on each bootstrap sample
-run_bootstrap <- function() {
+run_bootstrap <- function(subsample_size) {
     require(data.table)
     panel_indices <- seq_along(panel)
-    resampled_panel_indices <- sort(sample(panel_indices, size=length(panel), replace=TRUE))  # Sample by point_id
+
+    ## Note that we sample without replacement for subsampling (unlique boostrap sampling which is done with replacement)
+    resampled_panel_indices <- sort(sample(panel_indices, size=subsample_size, replace=FALSE))  # Sample by point_id
 
     panel_boot <- panel[resampled_panel_indices]
     dtable_boot <- rbindlist(lapply(seq_along(panel_boot), function(panel_boot_index) {
@@ -220,7 +223,7 @@ run_bootstrap <- function() {
                    validation_landuse=panel_element$validation_landuse, year=seq(min(dtable$year), max(dtable$year)))
     }))
 
-    ## Careful, point_id is no longer a unique identifier (because of sampling with replacement), so we use boot_index instead
+
     setkey(dtable_boot, boot_index, year)
 
     dtable_boot[, predicted_landuse := levels(dtable$landuse_predicted)[y]]
@@ -438,9 +441,8 @@ clusterExport(cluster, c("baum_welch",
                          "viterbi_path",
                          "viterbi_path_time_homogeneous"))
 
-boots <- parLapply(cluster, seq_len(opt$n_bootstrap_samples), function(unused_input) {
-    run_bootstrap()
-})
+boots <- parLapply(cluster, rep(opt$subsample_size, opt$n_bootstrap_samples), run_bootstrap)
+## boots <- lapply(rep(opt$subsample_size, opt$n_bootstrap_samples), run_bootstrap)
 boots <- rbindlist(boots)
 
 stopCluster(cluster)
