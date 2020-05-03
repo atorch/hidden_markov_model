@@ -13,7 +13,7 @@ library(stringr)
 set.seed(789)
 
 opt_list <- list(make_option("--n_bootstrap_samples", default=200, type="integer"),
-                 make_option("--subsample_size", default=150, type="integer"),
+                 make_option("--subsample_size", default=250, type="integer"),
                  make_option("--panel_length", default="short"),
                  make_option("--classifier_training_fraction", default=0.15, type="double"),
                  make_option("--classifier_pasture_fraction", default=0.6, type="double",
@@ -442,7 +442,6 @@ clusterExport(cluster, c("baum_welch",
                          "viterbi_path_time_homogeneous"))
 
 boots <- parLapply(cluster, rep(opt$subsample_size, opt$n_bootstrap_samples), run_bootstrap)
-## boots <- lapply(rep(opt$subsample_size, opt$n_bootstrap_samples), run_bootstrap)
 boots <- rbindlist(boots)
 
 stopCluster(cluster)
