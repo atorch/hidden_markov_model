@@ -6,9 +6,8 @@ and estimating parameters using Expectation-Maximization (EM) and Minimum Distan
 ## R Simulations
 
 ```bash
-export DOCKER_TAG_R=hidden_markov_model_r
-sudo docker build -f ~/hidden_markov_model/Dockerfile-R ~/hidden_markov_model --tag=$DOCKER_TAG_R
-sudo docker run -it -v ~/hidden_markov_model:/home/hidden_markov_model $DOCKER_TAG_R bash
+sudo docker build -f ~/hidden_markov_model/Dockerfile ~/hidden_markov_model --tag=hidden_markov_model
+sudo docker run -it -v ~/hidden_markov_model:/home/hidden_markov_model hidden_markov_model bash
 cd /home/hidden_markov_model/src/
 Rscript simulation_counties.R
 ```
