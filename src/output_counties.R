@@ -83,7 +83,7 @@ for (f in seq_len(length(fileReadVec))){
 }
 
 ##colors for graph
-graphCol  <- setNames(c('green','blue','purple'), c("Frequency","Min Dist","Max Likelihood"))
+graphCol  <- setNames(c('green','blue','purple'), c("Freq","Min\nDist","Max\nLikelihood"))
 
 ##Make Graphs
 id_vars <- c('time', 'county_id',
@@ -107,12 +107,12 @@ n_points_per_county_disp_levels <- paste0("'N=", str_trim(format(sort(unique(cou
 county_df_melt[, n_points_per_county_disp := factor(paste0("'N=", str_trim(format(n_points_per_county, big.mark=",",scientific=FALSE)), " Points'"),
                                                     levels=n_points_per_county_disp_levels)]
 
-county_df_melt[variable %like% '_em', estimTypDisp := "Max Likelihood"]
-county_df_melt[variable %like% '_md', estimTypDisp := "Min Dist"]
-county_df_melt[variable %like% '_naive', estimTypDisp := "Frequency"]
+county_df_melt[variable %like% '_em', estimTypDisp := "Max\nLikelihood"]
+county_df_melt[variable %like% '_md', estimTypDisp := "Min\nDist"]
+county_df_melt[variable %like% '_naive', estimTypDisp := "Freq"]
 
 ## Note: the order of the factor levels controls the order along the x-axis in several of the graphs
-county_df_melt[, estimTypDisp := factor(estimTypDisp, levels=c("Frequency", "Max Likelihood", "Min Dist"))]
+county_df_melt[, estimTypDisp := factor(estimTypDisp, levels=c("Freq", "Max\nLikelihood", "Min\nDist"))]
 
 
 ##Graphs
@@ -123,7 +123,7 @@ plt <- ggplot(county_df_melt[ n_time_periods == 4 & prY11 == 90 & defRtLast == 2
     scale_x_discrete('Estimator') +
     facet_grid(paste0('P[',time,']')~n_points_per_county_disp,labeller = label_parsed)+
     theme_bw()
-ggsave('deforestation_probability_different_sample_size.png', width = 10, height = 4, units='in')
+ggsave('deforestation_probability_different_sample_size.png', width = 6, height = 4, units='in')
 
 plt <- ggplot(county_df_melt[ n_points_per_county == 1000 & prY11 == 90 & defRtLast == 20 & variable %like% 'deforestation_probability'], aes( y=value, x = estimTypDisp, group=variable)) +
     geom_boxplot() +
@@ -132,7 +132,7 @@ plt <- ggplot(county_df_melt[ n_points_per_county == 1000 & prY11 == 90 & defRtL
     scale_x_discrete('Estimator') +
     facet_grid(paste0('P[',time,']')~paste0("'T=",n_time_periods," Periods'"),labeller = label_parsed)+
     theme_bw()
-ggsave('deforestation_probability_different_nPeriods.png', width = 8, height = 4, units='in')
+ggsave('deforestation_probability_different_nPeriods.png', width = 6, height = 4, units='in')
 
 
 plt <- ggplot(county_df_melt[prY11 == 90 &  n_time_periods == 4 & defRtLast == 20 & time == 1 & variable %like% 'misclassification_probability_1'], aes( y=value, x = estimTypDisp, group=variable)) +
