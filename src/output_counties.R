@@ -260,7 +260,7 @@ cat('\\begin{tabular}{rr@{\\hskip .3in}ccc@{\\hskip .4in}ccc@{\\hskip .4in}ccc@{
 cat('\\hline\n')
 cat('& & ',paste0('\\multicolumn{3}{c}{N=',nVec,'}',collapse='&'),'\\\\\n')
 cat('\\hline\n')
-cat('&  ',rep('&Frequency & Min Dist & Max Likelihood',3),'\\\\\n')
+cat('&  ',rep('&Frequency & Min Dist & Max Likelihood',nVec),'\\\\\n')
 cat('\\hline\n')
 for(j in 1:length(matVec)){
     cat('&Bias &', paste0(sapply(nVec,function(n) paste0(sapply(c('naive','md','em'),
