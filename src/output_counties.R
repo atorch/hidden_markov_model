@@ -256,7 +256,7 @@ tVec <- c(1,1,1,1,1,2,2,3,3)
 nmVec <- c('P_{S_{1}}=.9','\\Upsilon(2,1)=.1','\\Upsilon(1,2)=.2','P_{1}(1,2)=.04','P_{1}(2,1)=.02','P_{2}(1,2)=.1','P_{2}(2,1)=.02','P_{3}(1,2)=.2','P_{3}(2,1)=.02')
 
 sink('mcTable.tex')
-cat('\\begin{tabular}{rr@{\\hskip .3in}ccc@{\\hskip .4in}ccc@{\\hskip .4in}ccc}\n')
+cat('\\begin{tabular}{rr@{\\hskip .3in}ccc@{\\hskip .4in}ccc@{\\hskip .4in}ccc@{\\hskip .4in}ccc}\n')
 cat('\\hline\n')
 cat('& & ',paste0('\\multicolumn{3}{c}{N=',nVec,'}',collapse='&'),'\\\\\n')
 cat('\\hline\n')
