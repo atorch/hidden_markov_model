@@ -218,7 +218,7 @@ mseFunc <- function(trueVal,keyword){
 }
 
 
-nVec <- c(100,500,1000, 10000)
+nVec <- c(100, 500, 1000, 10000)
 
 colsT <- iterDat[n_points_per_county %in% nVec & n_counties == 100  & mu1==90 & defRt1==4&defRtMid==10 & defRtLast==20 & prY11==90 & prY22==80 & n_points_per_county == 1000]
 colsMrgT <- colsT[,list(simID,fileID,nPts = n_points_per_county)]
@@ -263,11 +263,11 @@ cat('\\hline\n')
 cat('&  ',rep('&Frequency & Min Dist & Max Likelihood',3),'\\\\\n')
 cat('\\hline\n')
 for(j in 1:length(matVec)){
-    cat('&Bias &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
+    cat('&Bias &', paste0(sapply(nVec,function(n) paste0(sapply(c('naive','md','em'),
                                                                            function(e) outFunc(get(matVec[j]),n,e,'bias',tVec[j])),collapse='&')),collapse='&'),'\\\\\n')
-    cat('$',nmVec[j],'$& s.d. &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
+    cat('$',nmVec[j],'$& s.d. &', paste0(sapply(nVec,function(n) paste0(sapply(c('naive','md','em'),
                                                                                           function(e) outFunc(get(matVec[j]),n,e,'sd',tVec[j])),collapse='&')),collapse='&'),'\\\\\n')
-    cat('&RMSE &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
+    cat('&RMSE &', paste0(sapply(nVec,function(n) paste0(sapply(c('naive','md','em'),
                                                                            function(e) outFunc(get(matVec[j]),n,e,'rmse',tVec[j])),collapse='&')),collapse='&'),'\\\\\n')
     cat('\\\\\\\\')
 }
