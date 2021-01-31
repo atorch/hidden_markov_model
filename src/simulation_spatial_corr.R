@@ -3,11 +3,21 @@ library(ggplot2)
 
 source("hmm_functions.R")
 source("hmm_parameters.R")
+source("ising.R")
 
 set.seed(321123)
 
 params0 <- get_params0()
 params1 <- get_params1(params0)
+
+## Overall average Pr[Y | S]
+params0$pr_y
+params0$pr_y_given_cloudy <- rbind(c(0.82, 0.18),
+                                   c(0.3, 0.7))
+params0$pr_y_given_clear <- 2 * params0$pr_y - params0$pr_y_given_cloudy
+
+## Sanity check
+all(0.5 * params0$pr_y_given_clear + 0.5*params0$pr_y_given_cloudy == params0$pr_y)
 
 ## In this simulation, we want the hidden state S_{it}
 ## to vary at the _field_ level rather than the pixel level
@@ -25,8 +35,13 @@ fields <- lapply(seq_len(n_fields), function(field_id, params=params0) {
 n_pixels_per_side <- 200
 
 ## Construct a join table for going from pixels to their field_id
-df <- expand.grid(pixel_i=seq_len(n_pixels_per_side), pixel_j=seq_len(n_pixels_per_side),
+df <- expand.grid(pixel_i=seq_len(n_pixels_per_side),
+                  pixel_j=seq_len(n_pixels_per_side),
                   field_id=0)
+
+## TODO Might be cleaner to have z in {1, 2} instead of in {-1, 1},
+## so that it can be used as an array index
+df$z <- simulate_ising(n_pixels=nrow(df), beta=0.4, n_iter=50)  # TODO Increase n_iter
 
 n_fields_per_side <- sqrt(n_fields)
 
@@ -41,7 +56,8 @@ for(field_id in seq_len(n_fields)) {
     df[df$pixel_i >= cutoff_i & df$pixel_j >= cutoff_j, ]$field_id <- field_id
 }
 
-## How many pixels are in each field?  Should be (n_pixels_per_side / n_fields_per_side) ^ 2 pixels per field
+## How many pixels are in each field?
+## Should be (n_pixels_per_side / n_fields_per_side) ^ 2 pixels per field
 ## TODO Could generalize and have fields of different sizes
 table(df$field_id)
 
@@ -49,14 +65,22 @@ pixel_panel <- lapply(seq_len(nrow(df)), function(row_index, params=params0) {
     field_id <- df[row_index, ]$field_id
     pixel_i <- df[row_index, ]$pixel_i
     pixel_j <- df[row_index, ]$pixel_j
+    z <- df[row_index, ]$z
     field_state <- fields[[field_id]]$state
     y <- vapply(field_state, function(s) {
-        sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y[s, ])
+        ## TODO Prob needs to depend on z
+        ## TODO Either on z or on z[t], depending on whether z changes over time
+        if(z == 1) {
+            sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_cloudy[s, ])
+        } else {
+            sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_given_clear[s, ])
+        }
     }, FUN.VALUE=1)
     time <- seq_along(y)
     return(list(field_state=field_state,
                 field_id=field_id,
                 y=y,
+                z=z,
                 time=time,
                 pixel_i=pixel_i,
                 pixel_j=pixel_j))
@@ -80,9 +104,8 @@ max(abs(c(params1_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE
 max(abs(params1_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
 
 dtable <- rbindlist(Map(data.frame, pixel_panel))
-head(dtable)
-
 dtable[, time_label := sprintf("time %s", time)]
+head(dtable)
 
 colors <- c("#dfc27d", "#018571")
 
@@ -101,6 +124,15 @@ p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(field_state))) +
       ylab("pixel coordinate (northing)"))
 p
 ggsave("simulation_spatial_corr_true_field_state.png", plot=p, width=6, height=4, units="in")
+
+# TODO Save plot of Z -- static or changing over time?
+p <- (ggplot(subset(dtable, time == 1), aes(x=pixel_i, y=pixel_j, fill=factor(z))) +
+      geom_raster() +
+      scale_fill_manual("z (aka 'clouds'\nor 'haze')", values=c("grey", "black")) +
+      xlab("pixel coordinate (easting)") +
+      ylab("pixel coordinate (northing)"))
+p
+ggsave("simulation_spatial_corr_z_static_clouds_haze.png", plot=p, width=6, height=4, units="in")
 
 p <- (ggplot(subset(dtable, time == 1), aes(x=pixel_i, y=pixel_j, fill=factor(y))) +
       geom_raster() +
@@ -137,9 +169,12 @@ P3_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat[[3]])
 ## Naive estimates have much larger errors than EM estimates
 max(abs(P1_hat_naive - params0$P_list[[1]]))
 max(abs(params0_hat$P_list[[1]] - params0$P_list[[1]]))
+max(abs(params1_hat$P_list[[1]] - params0$P_list[[1]]))
 
 max(abs(P2_hat_naive - params0$P_list[[2]]))
 max(abs(params0_hat$P_list[[2]] - params0$P_list[[2]]))
+max(abs(params1_hat$P_list[[2]] - params0$P_list[[2]]))
 
 max(abs(P3_hat_naive - params0$P_list[[3]]))
 max(abs(params0_hat$P_list[[3]] - params0$P_list[[3]]))
+max(abs(params1_hat$P_list[[3]] - params0$P_list[[3]]))
