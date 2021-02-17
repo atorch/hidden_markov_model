@@ -8,7 +8,6 @@ source("ising.R")
 set.seed(321123)
 
 params0 <- get_params0()
-params1 <- get_params1(params0)
 
 ## Overall average Pr[Y | S]
 params0$pr_y
@@ -18,94 +17,87 @@ params0$pr_y_given_clear <- 2 * params0$pr_y - params0$pr_y_given_cloudy
 
 ## Sanity check
 all(0.5 * params0$pr_y_given_clear + 0.5*params0$pr_y_given_cloudy == params0$pr_y)
+all(params0$pr_y_given_clear <= 1)
 
-## In this simulation, we want the hidden state S_{it}
-## to vary at the _field_ level rather than the pixel level
-## However, classification errors will occur at the pixel level,
-## and we will use pixel-level observations to estimate the model's parameters
-n_fields <- 100
+run_single_simulation <- function(simulation_id, params0, n_fields=100, n_pixels_per_side=100) {
 
-fields <- lapply(seq_len(n_fields), function(field_id, params=params0) {
-    state <- simulate_discrete_markov(params)
-    return(list(state=state, field_id=field_id))
-})
+    ## In this simulation, we want the hidden state S_{it}
+    ## to vary at the _field_ level rather than the pixel level
+    ## However, classification errors will occur at the pixel level,
+    ## and we will use pixel-level observations to estimate the model's parameters
 
-## At 30 meter resolution, this would mean 30^2 * 200^2 meters^2 of area,
-## or roughly 36 kilometers^2 (8,896 acres)
-n_pixels_per_side <- 200
+    fields <- lapply(seq_len(n_fields), function(field_id, params=params0) {
+        state <- simulate_discrete_markov(params)
+        return(list(state=state, field_id=field_id))
+    })
 
-## Construct a join table for going from pixels to their field_id
-df <- expand.grid(pixel_i=seq_len(n_pixels_per_side),
-                  pixel_j=seq_len(n_pixels_per_side),
-                  field_id=0)
+    ## Construct a join table for going from pixels to their field_id
+    df <- expand.grid(pixel_i=seq_len(n_pixels_per_side),
+                      pixel_j=seq_len(n_pixels_per_side),
+                      field_id=0)
 
-## TODO Might be cleaner to have z in {1, 2} instead of in {-1, 1},
-## so that it can be used as an array index
-df$z <- simulate_ising(n_pixels=nrow(df), beta=0.4, n_iter=50)  # TODO Increase n_iter
+    ## TODO Might be cleaner to have z in {1, 2} instead of in {-1, 1},
+    ## so that it can be used as an array index
+    ## TODO Speed this up, and then increase n_iter
+    df$z <- simulate_ising(n_pixels=nrow(df), beta=0.4, n_iter=50)
 
-n_fields_per_side <- sqrt(n_fields)
+    n_fields_per_side <- sqrt(n_fields)
 
-## TODO Could have fields of different sizes by changing the edges here
-field_edges <- expand.grid(pixel_i=seq(1, n_pixels_per_side, n_pixels_per_side / n_fields_per_side),
-                           pixel_j=seq(1, n_pixels_per_side, n_pixels_per_side / n_fields_per_side))
-stopifnot(nrow(field_edges) == n_fields)
+    ## TODO Could have fields of different sizes by changing the edges here
+    ## TODO Could speed up simulation by doing this once outside this fn and passing it in
+    field_edges <- expand.grid(pixel_i=seq(1, n_pixels_per_side, n_pixels_per_side / n_fields_per_side),
+                               pixel_j=seq(1, n_pixels_per_side, n_pixels_per_side / n_fields_per_side))
+    stopifnot(nrow(field_edges) == n_fields)
 
-for(field_id in seq_len(n_fields)) {
-    cutoff_i <- field_edges[field_id, ]$pixel_i
-    cutoff_j <- field_edges[field_id, ]$pixel_j
-    df[df$pixel_i >= cutoff_i & df$pixel_j >= cutoff_j, ]$field_id <- field_id
+    for(field_id in seq_len(n_fields)) {
+        cutoff_i <- field_edges[field_id, ]$pixel_i
+        cutoff_j <- field_edges[field_id, ]$pixel_j
+        df[df$pixel_i >= cutoff_i & df$pixel_j >= cutoff_j, ]$field_id <- field_id
+    }
+
+    pixel_panel <- lapply(seq_len(nrow(df)), function(row_index, params=params0) {
+        field_id <- df[row_index, ]$field_id
+        pixel_i <- df[row_index, ]$pixel_i
+        pixel_j <- df[row_index, ]$pixel_j
+        z <- df[row_index, ]$z
+        field_state <- fields[[field_id]]$state
+        y <- vapply(field_state, function(s) {
+            if(z == 1) {
+                sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_cloudy[s, ])
+            } else {
+                sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_given_clear[s, ])
+            }
+        }, FUN.VALUE=1)
+        time <- seq_along(y)
+        return(list(field_state=field_state,
+                    field_id=field_id,
+                    y=y,
+                    z=z,
+                    time=time,
+                    pixel_i=pixel_i,
+                    pixel_j=pixel_j))
+    })
+
+    estimates <- get_hmm_and_minimum_distance_estimates_random_initialization(params=params0, panel=pixel_panel)
+
+    return(list(pixel_panel=pixel_panel,
+                estimates=estimates,
+                params=params0,
+                simulation_id=simulation_id))
 }
 
-## How many pixels are in each field?
-## Should be (n_pixels_per_side / n_fields_per_side) ^ 2 pixels per field
-## TODO Could generalize and have fields of different sizes
-table(df$field_id)
+simulation <- run_single_simulation(simulation_id=0, params0)
 
-pixel_panel <- lapply(seq_len(nrow(df)), function(row_index, params=params0) {
-    field_id <- df[row_index, ]$field_id
-    pixel_i <- df[row_index, ]$pixel_i
-    pixel_j <- df[row_index, ]$pixel_j
-    z <- df[row_index, ]$z
-    field_state <- fields[[field_id]]$state
-    y <- vapply(field_state, function(s) {
-        ## TODO Prob needs to depend on z
-        ## TODO Either on z or on z[t], depending on whether z changes over time
-        if(z == 1) {
-            sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_cloudy[s, ])
-        } else {
-            sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_given_clear[s, ])
-        }
-    }, FUN.VALUE=1)
-    time <- seq_along(y)
-    return(list(field_state=field_state,
-                field_id=field_id,
-                y=y,
-                z=z,
-                time=time,
-                pixel_i=pixel_i,
-                pixel_j=pixel_j))
-})
+simulation$estimates$em_params_hat_best_likelihood$P_list  # Compare to params0$P_list
+simulation$estimates$em_params_hat_best_likelihood$pr_y  # Compare to params0$pr_y
 
-## Inspect the observations y and hidden state at the first two pixels
-pixel_panel[[1]]
-pixel_panel[[2]]
+n_simulations <- 10
+simulations <- lapply(seq_len(n_simulations), run_single_simulation, params0=params0)
 
-## Initialize EM at true parameter values (easy case)
-params0_hat <- get_expectation_maximization_estimates(pixel_panel, params0, max_iter=20, epsilon=0.001)
+lapply(simulations, function(x) x$estimates$em_params_hat_best_likelihood$P_list[[1]])  # Compare to params0$P_list[[1]]
 
-stopifnot(all(diff(params0_hat$loglik) > 0))  # Loglik should be increasing
-max(abs(c(params0_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
-max(abs(params0_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
-
-## Initialize EM at incorrect parameter values (more difficult)
-params1_hat <- get_expectation_maximization_estimates(pixel_panel, params1, max_iter=20, epsilon=0.001)
-
-max(abs(c(params1_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
-max(abs(params1_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
-
-dtable <- rbindlist(Map(data.frame, pixel_panel))
+dtable <- rbindlist(Map(data.frame, simulation$pixel_panel))
 dtable[, time_label := sprintf("time %s", time)]
-head(dtable)
 
 colors <- c("#dfc27d", "#018571")
 
@@ -149,32 +141,3 @@ p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(y))) +
       ylab("pixel coordinate (northing)"))
 p
 ggsave("simulation_spatial_corr_observed_y.png", plot=p, width=6, height=4, units="in")
-
-dtable[, pixel_id := sprintf("pixel_%s_%s", pixel_i, pixel_j)]
-
-dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="pixel_id"]
-dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="pixel_id"]
-head(dtable[, c("pixel_id", "time", "y", "y_one_period_ahead", "y_two_periods_ahead"), with=FALSE], 25)  # Sanity check
-
-## Compute the joint distribution of (Y_{t+1}, Y_{t}) for each time period t
-M_Y_joint_hat <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
-    with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
-})
-
-## Naive estimate of transitions using observed Y
-P1_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat[[1]])
-P2_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat[[2]])
-P3_hat_naive <- get_transition_probs_from_M_S_joint(M_Y_joint_hat[[3]])
-
-## Naive estimates have much larger errors than EM estimates
-max(abs(P1_hat_naive - params0$P_list[[1]]))
-max(abs(params0_hat$P_list[[1]] - params0$P_list[[1]]))
-max(abs(params1_hat$P_list[[1]] - params0$P_list[[1]]))
-
-max(abs(P2_hat_naive - params0$P_list[[2]]))
-max(abs(params0_hat$P_list[[2]] - params0$P_list[[2]]))
-max(abs(params1_hat$P_list[[2]] - params0$P_list[[2]]))
-
-max(abs(P3_hat_naive - params0$P_list[[3]]))
-max(abs(params0_hat$P_list[[3]] - params0$P_list[[3]]))
-max(abs(params1_hat$P_list[[3]] - params0$P_list[[3]]))
