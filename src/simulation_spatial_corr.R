@@ -1,5 +1,6 @@
 library(data.table)
 library(ggplot2)
+library(parallel)
 
 source("hmm_functions.R")
 source("hmm_parameters.R")
@@ -86,17 +87,63 @@ run_single_simulation <- function(simulation_id, params0, n_fields=100, n_pixels
                 simulation_id=simulation_id))
 }
 
-simulation <- run_single_simulation(simulation_id=0, params0)
+max_cores <- 12
+num_cores <- min(detectCores(), max_cores)
+cluster <- makeCluster(num_cores)  # Call stopCluster when done
 
-simulation$estimates$em_params_hat_best_likelihood$P_list  # Compare to params0$P_list
-simulation$estimates$em_params_hat_best_likelihood$pr_y  # Compare to params0$pr_y
+clusterExport(cluster, c("adjacency.matrix",
+                         "baum_welch",
+                         "eq_function_minimum_distance",
+                         "get_expectation_maximization_estimates",
+                         "get_hmm_and_minimum_distance_estimates_random_initialization",
+                         "get_min_distance_estimates",
+                         "get_random_initial_parameters",
+                         "get_transition_probs_from_M_S_joint",
+                         "is_diag_dominant",
+                         "objfn_minimum_distance",
+                         "run_single_simulation",
+                         "simulate_discrete_markov",
+                         "simulate_hmm",
+                         "simulate_ising",
+                         "valid_panel_element",
+                         "valid_parameters"))
 
-n_simulations <- 10
-simulations <- lapply(seq_len(n_simulations), run_single_simulation, params0=params0)
+n_simulations <- 50
+simulations <- parLapply(cluster, seq_len(n_simulations), run_single_simulation, params0=params0)
 
-lapply(simulations, function(x) x$estimates$em_params_hat_best_likelihood$P_list[[1]])  # Compare to params0$P_list[[1]]
+stopCluster(cluster)
 
-dtable <- rbindlist(Map(data.frame, simulation$pixel_panel))
+simulation_summaries <- lapply(simulations, function(simulation) {
+    ## TODO Include summary stats about Z in simulation summary?  Should be around 50-50 for high and low "clouds"
+    P_hat_naive <- lapply(simulation$estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
+    data.table(em_estimated_transition_1_2=sapply(simulation$estimates$em_params_hat_best_likelihood$P_list, function(x) return(x[1, 2])),
+               naive_estimated_transition_1_2=sapply(P_hat_naive, function(x) return(x[1, 2])),
+               true_transition_1_2=sapply(params0$P_list, function(x) return(x[1, 2])),
+               time=head(simulation$pixel_panel[[1]]$time, length(simulation$pixel_panel[[1]]$time) - 1),
+               simulation_id=simulation$simulation_id)
+})
+
+simulation_summary <- rbindlist(simulation_summaries)
+
+simulation_summary_melt  <- melt(simulation_summary, id.vars=c("simulation_id", "time", "true_transition_1_2"))
+
+simulation_summary_melt$time_label <- sprintf("time %s to %s", simulation_summary_melt$time, simulation_summary_melt$time+1)
+
+simulation_summary_melt[variable %like% "em_", algorithm := "EM"]
+simulation_summary_melt[variable %like% "naive_", algorithm := "Frequency"]
+
+## TODO X axis should be EM, Min dist and naive, facet wrap by time
+p <- (ggplot(simulation_summary_melt, aes(y=value, x=algorithm, group=variable)) +
+      geom_boxplot() +
+      geom_hline(aes(yintercept=true_transition_1_2), linetype = 'dashed') +
+      ylab("transition probability") +
+      theme_bw() +
+      facet_wrap(~ time_label))
+p
+ggsave("simulation_spatial_corr_estimated_transition_probabilities.png", plot=p, width=6, height=4, units="in")
+
+## These are plots showing a single simulation in detail
+dtable <- rbindlist(Map(data.frame, simulations[[1]]$pixel_panel))
 dtable[, time_label := sprintf("time %s", time)]
 
 colors <- c("#dfc27d", "#018571")
