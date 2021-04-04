@@ -108,7 +108,7 @@ clusterExport(cluster, c("adjacency.matrix",
                          "valid_panel_element",
                          "valid_parameters"))
 
-n_simulations <- 50
+n_simulations <- 400
 simulations <- parLapply(cluster, seq_len(n_simulations), run_single_simulation, params0=params0)
 
 stopCluster(cluster)
@@ -117,6 +117,7 @@ simulation_summaries <- lapply(simulations, function(simulation) {
     ## TODO Include summary stats about Z in simulation summary?  Should be around 50-50 for high and low "clouds"
     P_hat_naive <- lapply(simulation$estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
     data.table(em_estimated_transition_1_2=sapply(simulation$estimates$em_params_hat_best_likelihood$P_list, function(x) return(x[1, 2])),
+               md_estimated_transition_1_2=sapply(simulation$estimates$min_dist_params_hat_best_objfn$P_list, function(x) return(x[1, 2])),
                naive_estimated_transition_1_2=sapply(P_hat_naive, function(x) return(x[1, 2])),
                true_transition_1_2=sapply(params0$P_list, function(x) return(x[1, 2])),
                time=head(simulation$pixel_panel[[1]]$time, length(simulation$pixel_panel[[1]]$time) - 1),
@@ -130,9 +131,13 @@ simulation_summary_melt  <- melt(simulation_summary, id.vars=c("simulation_id", 
 simulation_summary_melt$time_label <- sprintf("time %s to %s", simulation_summary_melt$time, simulation_summary_melt$time+1)
 
 simulation_summary_melt[variable %like% "em_", algorithm := "EM"]
+simulation_summary_melt[variable %like% "md_", algorithm := "MD"]
 simulation_summary_melt[variable %like% "naive_", algorithm := "Frequency"]
 
-## TODO X axis should be EM, Min dist and naive, facet wrap by time
+simulation_summary_melt[, algorithm := factor(algorithm, levels=c("Frequency", "EM", "MD"))]
+
+## TODO Write simulation summary to disk
+
 p <- (ggplot(simulation_summary_melt, aes(y=value, x=algorithm, group=variable)) +
       geom_boxplot() +
       geom_hline(aes(yintercept=true_transition_1_2), linetype = 'dashed') +
@@ -140,7 +145,8 @@ p <- (ggplot(simulation_summary_melt, aes(y=value, x=algorithm, group=variable))
       theme_bw() +
       facet_wrap(~ time_label))
 p
-ggsave("simulation_spatial_corr_estimated_transition_probabilities.png", plot=p, width=6, height=4, units="in")
+filename <- sprintf("simulation_spatial_corr_estimated_transition_probabilities_%s_simulations.png", n_simulations)
+ggsave(filename, plot=p, width=6, height=4, units="in")
 
 ## These are plots showing a single simulation in detail
 dtable <- rbindlist(Map(data.frame, simulations[[1]]$pixel_panel))
