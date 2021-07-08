@@ -1,7 +1,7 @@
 library(ngspatial)  # For adjacency.matrix
 library(plot.matrix)
 
-simulate_ising <- function(n_pixels=100, beta=1, n_iter=1000) {
+simulate_ising <- function(n_pixels, beta, n_iter=1000) {
     ## Following http://statweb.stanford.edu/~jtaylo/courses/stats352/notes/ising.pdf
     values <- c(-1, 1)
     n_pixels_per_side <- sqrt(n_pixels)
