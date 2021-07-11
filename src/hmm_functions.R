@@ -706,6 +706,7 @@ simulate_discrete_markov <- function(params) {
 
 simulate_hmm <- function(params) {
     stopifnot(valid_parameters(params))
+    ## TODO This is called S in the paper, not X.  Call it "state" for clarity?
     x <- simulate_discrete_markov(params)
     if("pr_y" %in% names(params)) {
         y <- vapply(x, function(x) {
