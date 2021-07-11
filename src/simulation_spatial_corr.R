@@ -8,7 +8,7 @@ source("ising.R")
 
 set.seed(321123)
 
-run_single_simulation <- function(simulation_id, params0, n_fields=100, n_pixels_per_side=100) {
+run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_per_side, n_fields=100) {
 
     ## In this simulation, we want the hidden state S_{it}
     ## to vary at the _field_ level rather than the pixel level
@@ -28,7 +28,8 @@ run_single_simulation <- function(simulation_id, params0, n_fields=100, n_pixels
     ## TODO Might be cleaner to have z in {1, 2} instead of in {-1, 1},
     ## so that it can be used as an array index
     ## TODO Speed this up, and then increase n_iter
-    df$z <- simulate_ising(n_pixels=nrow(df), beta=params0$ising_beta, n_iter=50)
+
+    df$z <- simulate_ising(n_pixels=nrow(df), adjacency=adjacency, beta=params0$ising_beta, n_iter=50)
 
     n_fields_per_side <- sqrt(n_fields)
 
@@ -90,7 +91,7 @@ all(params0$pr_y_given_clear <= 1)
 
 ## TODO Also vary field size (10-by-10 pixels, 5-by-5, 1-by-1)
 
-for(ising_beta in c(0.0, 0.5, 1.0, 1.5)) {
+for(ising_beta in c(0.0, 0.5, 1.0, 1.5, 2.0)) {
     
     params0$ising_beta <- ising_beta
 
@@ -115,8 +116,16 @@ for(ising_beta in c(0.0, 0.5, 1.0, 1.5)) {
                              "valid_panel_element",
                              "valid_parameters"))
 
-    n_simulations <- 100
-    simulations <- parLapply(cluster, seq_len(n_simulations), run_single_simulation, params0=params0)
+    n_pixels_per_side <- 100
+    adjacency <- adjacency.matrix(m=n_pixels_per_side, n=n_pixels_per_side)
+
+    n_simulations <- 200
+    simulations <- parLapply(cluster,
+                             seq_len(n_simulations),
+                             run_single_simulation,
+                             params0=params0,
+                             adjacency=adjacency,
+                             n_pixels_per_side=n_pixels_per_side)
 
     stopCluster(cluster)
 
@@ -157,77 +166,63 @@ for(ising_beta in c(0.0, 0.5, 1.0, 1.5)) {
     
     simulation_summary_melt[, algorithm := factor(algorithm, levels=c("Frequency", "EM", "MD"))]
 
-    ## TODO Include ising parameter in title?
+    title <- sprintf("%s Simulations, Ising Beta = %s", n_simulations, params0$ising_beta)
     p <- (ggplot(simulation_summary_melt, aes(y=value, x=algorithm, group=variable)) +
           geom_boxplot() +
           geom_hline(aes(yintercept=true_transition_1_2), linetype="dashed") +
           ylab("transition probability") +
           theme_bw() +
+          ggtitle(title) + 
           facet_wrap(~ time_label))
     p
     filename <- sprintf("simulation_spatial_corr_estimated_transition_probabilities_ising_beta_%s_%s_simulations.png", params0$ising_beta, n_simulations)
+    ggsave(filename, plot=p, width=6, height=4, units="in")
+
+    ## These are plots showing a single simulation in detail
+    dtable <- rbindlist(Map(data.frame, simulations[[1]]$pixel_panel))
+    dtable[, time_label := sprintf("time %s", time)]
+    dtable[, classification_error := field_state != y]
+
+    colors <- c("#dfc27d", "#018571")
+
+    p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(field_state))) +
+          facet_wrap(~ time_label) +
+          geom_raster() +
+          scale_fill_manual("true field state", values=colors) +
+          xlab("pixel coordinate (easting)") +
+          ylab("pixel coordinate (northing)"))
+
+    filename <- sprintf("simulation_spatial_corr_true_field_state_ising_beta_%s_%s_simulations.png", params0$ising_beta, n_simulations)
+    ggsave(filename, plot=p, width=6, height=4, units="in")
+
+    p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(classification_error))) +
+          facet_wrap(~ time_label) +
+          geom_raster() +
+          scale_fill_manual("classification error", values=c("grey", "red")) +
+          xlab("pixel coordinate (easting)") +
+          ylab("pixel coordinate (northing)"))
+    filename <- sprintf("simulation_spatial_corr_classification_errors_%s_%s_simulations.png", params0$ising_beta, n_simulations)
+    ggsave(filename, plot=p, width=6, height=4, units="in")
+
+    ## TODO Save plot of Z -- static or changing over time?
+    p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(z))) +
+          geom_raster() +
+          facet_wrap(~ time_label) +
+          scale_fill_manual("z (aka 'clouds'\nor 'haze')", values=c("grey", "black")) +
+          xlab("pixel coordinate (easting)") +
+          ylab("pixel coordinate (northing)"))
+    filename <- sprintf("simulation_spatial_corr_z_static_clouds_haze_%s_%s_simulations.png", params0$ising_beta, n_simulations)
+    ggsave(filename, plot=p, width=6, height=4, units="in")
+
+    p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(y))) +
+          facet_wrap(~ time_label) +
+          geom_raster() +
+          scale_fill_manual("observed y", values=colors) +
+          xlab("pixel coordinate (easting)") +
+          ylab("pixel coordinate (northing)"))
+    filename <- sprintf("simulation_spatial_corr_observed_y_%s_%s_simulations.png", params0$ising_beta, n_simulations)
     ggsave(filename, plot=p, width=6, height=4, units="in")
 }
 
 ## TODO Also save scatterplot showing frequency on x-axis, EM and MD on y-axis (or showing errors for all relative to true transition proba)
 ## TODO Also save plot of estimates of misclassification probabilities
-
-## TODO Also run this code _without_ spatial correlation in errors (and make sure output is saved in different filenames)
-
-## These are plots showing a single simulation in detail
-dtable <- rbindlist(Map(data.frame, simulations[[1]]$pixel_panel))
-dtable[, time_label := sprintf("time %s", time)]
-dtable[, classification_error := field_state != y]
-
-colors <- c("#dfc27d", "#018571")
-
-p <- (ggplot(subset(dtable, time == 1), aes(x=pixel_i, y=pixel_j, fill=factor(field_state))) +
-      geom_raster() +
-      scale_fill_manual("true field state", values=colors) +
-      xlab("pixel coordinate (easting)") +
-      ylab("pixel coordinate (northing)"))
-p
-
-p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(field_state))) +
-      facet_wrap(~ time_label) +
-      geom_raster() +
-      scale_fill_manual("true field state", values=colors) +
-      xlab("pixel coordinate (easting)") +
-      ylab("pixel coordinate (northing)"))
-p
-ggsave("simulation_spatial_corr_true_field_state.png", plot=p, width=6, height=4, units="in")
-
-p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(classification_error))) +
-      facet_wrap(~ time_label) +
-      geom_raster() +
-      scale_fill_manual("classification error", values=c("grey", "red")) +
-      xlab("pixel coordinate (easting)") +
-      ylab("pixel coordinate (northing)"))
-p
-ggsave("simulation_spatial_corr_classification_errors.png", plot=p, width=6, height=4, units="in")
-
-# TODO Save plot of Z -- static or changing over time?
-p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(z))) +
-      geom_raster() +
-      facet_wrap(~ time_label) +
-      scale_fill_manual("z (aka 'clouds'\nor 'haze')", values=c("grey", "black")) +
-      xlab("pixel coordinate (easting)") +
-      ylab("pixel coordinate (northing)"))
-p
-ggsave("simulation_spatial_corr_z_static_clouds_haze.png", plot=p, width=6, height=4, units="in")
-
-p <- (ggplot(subset(dtable, time == 1), aes(x=pixel_i, y=pixel_j, fill=factor(y))) +
-      geom_raster() +
-      scale_fill_manual("observed y", values=colors) +
-      xlab("pixel coordinate (easting)") +
-      ylab("pixel coordinate (northing)"))
-p
-
-p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(y))) +
-      facet_wrap(~ time_label) +
-      geom_raster() +
-      scale_fill_manual("observed y", values=colors) +
-      xlab("pixel coordinate (easting)") +
-      ylab("pixel coordinate (northing)"))
-p
-ggsave("simulation_spatial_corr_observed_y.png", plot=p, width=6, height=4, units="in")
