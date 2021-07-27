@@ -2,6 +2,7 @@
 
 \setlength{\parskip}{1em}
 
+\usepackage{amsmath}
 \usepackage{graphicx}
 \graphicspath{ {./src/} }
 
@@ -46,7 +47,7 @@ The data generating process is as follows:
 \item the observations $Y_{it}$ are generated according to $\Pr\left[Y_{it} \,|\, S_{it}, Z_{it}\right]$. The observations are \textit{conditionally independent} across pixels and across time given $S$ and $Z$. However, note that the spatial and serial correlation in $Z_{it}$ (and in $S_{it}$) can induce spatial and serial correlation in misclassifications (i.e. in the events $Y_{it} \neq S_{it}$), and that we will have spatial correlation in misclassifications even when conditioning on $S_{it}$. $Z_{it}$ can induce spatial correlation in misclassifications within a field, for example.
 \end{itemize}
 
-Pictures are worth a thousand words: see Figures~\ref{fig:landuses}, \ref{fig:observations}, \ref{fig:classificationerrors} and~\ref{fig:z}.
+To visualize the simulation, see Figures~\ref{fig:landuses}, \ref{fig:observations}, \ref{fig:classificationerrors} and~\ref{fig:z}.
 Think of the green pixels as forest and the other pixels as pasture, for example.
 
 Notice the difference between the 10-by-10 pixel ``fields'' in Figure~\ref{fig:landuses}
@@ -54,28 +55,98 @@ versus the noisy observations in Figure~\ref{fig:observations}.
 
 Also note the spatial and temporal correlation in classification errors visible in Figure~\ref{fig:classificationerrors}.
 
+The misclassification probabilities used in this simulation are
+\begin{equation}
+  \Pr\left[Y \,|\, S, Z_{it} = \textrm{low}\right] =
+    \begin{bmatrix}
+    0.98 & 0.02 \\
+    0.1 & 0.9 \\
+    \end{bmatrix}%
+\end{equation}
+\begin{equation}
+  \Pr\left[Y \,|\, S, Z_{it} = \textrm{high}\right] =
+    \begin{bmatrix}
+    0.82 & 0.18 \\
+    0.3 & 0.7 \\
+    \end{bmatrix}%
+\end{equation}
+
+Think of $Z_{it} = \textrm{high}$ as meaning ``it is hazy/cloudy'' or ``the classifier is more likely to make mistakes at this particular location in space and time.''.
+
+The marginal distribution of $Z_{it}$ is high or low with equal probability, implying overall misclassification probabilities of
+\begin{equation}
+  0.5 \cdot \Pr\left[Y \,|\, S, Z_{it} = \textrm{high}\right] + 0.5 \cdot \Pr\left[Y \,|\, S, Z_{it} = \textrm{low}\right] =
+    \begin{bmatrix}
+    0.9 & 0.1 \\
+    0.2 & 0.8 \\
+    \end{bmatrix}%
+\end{equation}
+
+
 \begin{figure}[h]
   \centering
-  \includegraphics{simulation_spatial_corr_true_field_state}
+  \includegraphics{simulation_spatial_corr_true_field_state_ising_beta_1_200_simulations}
   \caption{Simulated Land Uses $S_{it}$\label{fig:landuses}}
 \end{figure}
 
 \begin{figure}[h]
   \centering
-  \includegraphics{simulation_spatial_corr_observed_y}
+  \includegraphics{simulation_spatial_corr_observed_y_1_200_simulations}
   \caption{Simulated Observations $Y_{it}$\label{fig:observations}}
 \end{figure}
 
 \begin{figure}[h]
   \centering
-  \includegraphics{simulation_spatial_corr_classification_errors}
+  \includegraphics{simulation_spatial_corr_classification_errors_1_200_simulations}
   \caption{Simulated Classification Errors ($Y_{it} \neq S_{it}$)\label{fig:classificationerrors}}
 \end{figure}
 
 \begin{figure}[h]
   \centering
-  \includegraphics{simulation_spatial_corr_z_static_clouds_haze}
-  \caption{Simulated ``Clouds'' or ``Classifier Difficulty'' $Z_{it}$\label{fig:z}}
+  \includegraphics{simulation_spatial_corr_z_static_clouds_haze_2_200_simulations}
+  \caption{Simulated Classifier Difficulty $Z_{it}$\label{fig:z} With High Spatial Correlation (Ising $\beta = 2$)}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{simulation_spatial_corr_z_static_clouds_haze_1_200_simulations}
+  \caption{Simulated Classifier Difficulty $Z_{it}$\label{fig:z} With Moderate Spatial Correlation (Ising $\beta = 1$)}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{{{simulation_spatial_corr_z_static_clouds_haze_0.5_200_simulations}}}
+  \caption{Simulated Classifier Difficulty $Z_{it}$\label{fig:z} With Low Spatial Correlation (Ising $\beta = 0.5$)}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{simulation_spatial_corr_z_static_clouds_haze_0_200_simulations}
+  \caption{Simulated Classifier Difficulty $Z_{it}$\label{fig:z} With Zero Spatial Correlation (Ising $\beta = 0$)}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{simulation_spatial_corr_estimated_transition_probabilities_ising_beta_2_200_simulations}
+  \caption{Estimated Transition Probabilities (High Spatial Correlation in $Z_{it}$)}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{simulation_spatial_corr_estimated_transition_probabilities_ising_beta_1_200_simulations}
+  \caption{Estimated Transition Probabilities (Moderate Spatial Correlation in $Z_{it}$)}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{{{simulation_spatial_corr_estimated_transition_probabilities_ising_beta_0.5_200_simulations}}}
+  \caption{Estimated Transition Probabilities (Low Spatial Correlation in $Z_{it}$)}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{simulation_spatial_corr_estimated_transition_probabilities_ising_beta_0_200_simulations}
+  \caption{Estimated Transition Probabilities (Zero Spatial Correlation in $Z_{it}$)}
 \end{figure}
 
 \end{document}
