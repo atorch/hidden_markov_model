@@ -55,11 +55,13 @@ run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_pe
 
         field_state <- fields[[field_id]]$state
         y <- vapply(field_state, function(s) {
-            if(params$include_z_in_simulation && z == 1) {
-                sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_cloudy[s, ])
-            } else if(params$include_z_in_simulation && z != 1) {
-                sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_given_clear[s, ])
-            } else {
+            if(params$include_z_in_simulation) {
+                if(z == 1) {
+                    sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_cloudy[s, ])
+                } else {
+                    sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_given_clear[s, ])
+                }
+            } else  {
                 sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y[s, ])
             }
         }, FUN.VALUE=1)
@@ -67,7 +69,7 @@ run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_pe
         return(list(field_state=field_state,
                     field_id=field_id,
                     y=y,
-                    z=z,
+                    z=ifelse(params0$include_z_in_simulation, z, NaN),
                     time=time,
                     pixel_i=pixel_i,
                     pixel_j=pixel_j))
@@ -99,7 +101,7 @@ all(params0$pr_y_given_clear <= 1)
 n_pixels_per_side <- 100
 adjacency <- adjacency.matrix(m=n_pixels_per_side, n=n_pixels_per_side)
 
-n_simulations <- 50
+n_simulations <- 100
 
 for(include_z_in_simulation in c(FALSE, TRUE)) {
 
@@ -200,7 +202,9 @@ for(include_z_in_simulation in c(FALSE, TRUE)) {
 
             field_width <- n_pixels_per_side / sqrt(n_fields)
 
-            title <- sprintf("%s Simulations, Ising Beta = %s, %s-by-%s Pixel Fields", n_simulations, params0$ising_beta, field_width, field_width)
+            z_description <- ifelse(include_z_in_simulation, sprintf("Ising Beta = %s", params0$ising_beta), "No Z")
+            title <- sprintf("%s Simulations, %s, %s-by-%s Pixel Fields", n_simulations, z_description, field_width, field_width)
+
             p <- (ggplot(simulation_summary_melt, aes(y=value, x=algorithm, group=variable)) +
                   geom_boxplot() +
                   geom_hline(aes(yintercept=true_transition), linetype="dashed") +
