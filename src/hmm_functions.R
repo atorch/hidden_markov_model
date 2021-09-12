@@ -181,6 +181,7 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
     dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
 
+    ## TODO How does this behave when Y is MCAR?
     M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
         with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
     })  # Joint distribution of (Y_{t+1}, Y_{t}) and (Y_{t+2}, Y_{t+1})
@@ -233,13 +234,6 @@ get_minimum_distance_estimates_random_initialization_time_homogeneous <- functio
     require(Rsolnp)
 
     random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
-
-    ## em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-    ##     return(get_expectation_maximization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
-    ## })
-    ## em_likelihoods <- sapply(em_params_hat_list, function(x) {
-    ##     return(max(x$loglik))
-    ## })
 
     for(idx in seq_along(panel)) {
         panel[[idx]]$point_id <- idx
@@ -476,7 +470,8 @@ apply_viterbi_path_in_parallel <- function(panel, params_hat, max_cores=30) {
 }
 
 baum_welch <- function(panel_element, params) {
-    ## Baum-Welch algorithm for HMM with discrete hidden x, discrete observations y (NAs allowed)
+    ## Baum-Welch algorithm for HMM with discrete hidden x,
+    ## discrete observations y (NAs allowed assuming data is missing completely at random)
     ## Written following Ramon van Handel's HMM notes, page 40, algorithm 3.2
     ## https://www.princeton.edu/~rvan/orf557/hmm080728.pdf
     ## Careful, his observation index is in {0, 1, ... , n} while I use {1, 2, ... , y_length}

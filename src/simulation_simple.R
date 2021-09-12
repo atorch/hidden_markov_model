@@ -1,13 +1,9 @@
 library(Rsolnp)
 library(data.table)
-library(ggplot2)
 library(grid)
-library(latex2exp)  # For ggplot2 xlab
 
 source("hmm_functions.R")
 source("hmm_parameters.R")
-source("ggplot_utils.R")
-set_ggplot_theme()
 
 set.seed(321321)
 

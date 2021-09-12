@@ -1,3 +1,5 @@
 csv/*
 pickles/*
 plots/*
+**/*rds
+**/*tif
