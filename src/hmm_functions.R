@@ -161,8 +161,9 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
 
     random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
 
+    ## TODO How often are we hitting max_iter?  Make it a parameter
     em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-        return(get_expectation_maximization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
+        return(get_expectation_maximization_estimates(panel, initial_params, max_iter=40, epsilon=0.001))
     })
     em_likelihoods <- sapply(em_params_hat_list, function(x) {
         return(max(x$loglik))
@@ -182,18 +183,23 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
 
     ## TODO How does this behave when Y is MCAR?
+    ## Joint distribution of (Y_{t+1}, Y_{t})
     M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
         with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
-    })  # Joint distribution of (Y_{t+1}, Y_{t}) and (Y_{t+2}, Y_{t+1})
+    })
 
     ## Compute inverses once and pass them to get_min_distance_estimates / solnp
     M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
 
     ## TODO Need to handle edge case where any of these matrices are not invertible, which might happen at small sample sizes
+    ## Joint distribution of (Y_{t+2}, Y_{t+1}, Y_{t})
     M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
         lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
             return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
-                        table(y_one_period_ahead, y)) / sum(dtable$time == fixed_t))
+                        table(y_one_period_ahead, y)) / sum(dtable$time == fixed_t &
+                                                            !is.na(dtable$y_two_periods_ahead) &
+                                                            !is.na(dtable$y_one_period_ahead) &
+                                                            !is.na(dtable$y)))
         })
     })
 
