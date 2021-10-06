@@ -171,7 +171,7 @@ for(pr_missing_data in c(0.1, 0.0)) {
                 ## TODO Include estimates of pr_y in simulation summary
 
                 simulation_summaries <- lapply(simulations, function(simulation) {            
-                    P_hat_naive <- lapply(simulation$estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)            
+                    P_hat_naive <- lapply(simulation$estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
                     data.table(em_estimated_transition_1_2=sapply(simulation$estimates$em_params_hat_best_likelihood$P_list, function(x) return(x[1, 2])),
                                md_estimated_transition_1_2=sapply(simulation$estimates$min_dist_params_hat_best_objfn$P_list, function(x) return(x[1, 2])),
                                naive_estimated_transition_1_2=sapply(P_hat_naive, function(x) return(x[1, 2])),

@@ -10,6 +10,7 @@ get_reforestation_prob_from_P <- function(P) {
 
 get_random_initial_parameters <- function(params0) {
 
+    ## TODO Does this function really need params0 as an arg?  Or only params0$n_components and n_time_periods?
     ## Given a true set of HMM parameters, return random incorrect parameters from which to begin parameter estimation
 
     initial_parameters <- list(n_components=params0$n_components)
@@ -189,6 +190,8 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     })
 
     ## Compute inverses once and pass them to get_min_distance_estimates / solnp
+    ## TODO Possible bug surfaces here when matrix isn't square
+    ## Can happen if a certain Y is not observed at all (in the entire panel) at a certain time index
     M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
 
     ## TODO Need to handle edge case where any of these matrices are not invertible, which might happen at small sample sizes
