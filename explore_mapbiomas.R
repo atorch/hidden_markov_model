@@ -1,30 +1,33 @@
-library(data.table)
-library(raster)
 library(Rsolnp)
+library(data.table)
+library(optparse)
+library(raster)
 
 source("src/hmm_functions.R")
 
 mapbiomas <- stack("HMM_MapBiomas_v2/mapbiomas.vrt")
 
-row <- 90000
-col <- 23500
+## TODO Pass this in via argparse
+opt_list <- list(make_option("--row", default=90000, type="integer"),
+                 make_option("--col", default=23500, type="integer"),
+                 make_option("--width_in_pixels", default=200, type="integer"))
+opt <- parse_args(OptionParser(option_list=opt_list))
+message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
 nlayers(mapbiomas)
 
-width_in_pixels <- 200
-
 window <- getValuesBlock(mapbiomas,
-                         row=row,
-                         col=col,
-                         nrows=width_in_pixels,
-                         ncols=width_in_pixels)
+                         row=opt$row,
+                         col=opt$col,
+                         nrows=opt$width_in_pixels,
+                         ncols=opt$width_in_pixels)
 dim(window)
 
-window_extent <- extent(mapbiomas, row, row + width_in_pixels, col, col + width_in_pixels)  # This has lat lons under the hood
-window_raster<- raster(window_extent, crs=crs(mapbiomas), nrows=width_in_pixels, ncols=width_in_pixels)
+window_extent <- extent(mapbiomas, opt$row, opt$row + opt$width_in_pixels, opt$col, opt$col + opt$width_in_pixels)
+window_raster<- raster(window_extent, crs=crs(mapbiomas), nrows=opt$width_in_pixels, ncols=opt$width_in_pixels)
 values(window_raster) <- window[, 1]
 
-filename <- sprintf("raster_window_%s_%s_width_%s_band_1.tif", row, col, width_in_pixels)
+filename <- sprintf("raster_window_%s_%s_width_%s_band_1.tif", opt$row, opt$col, opt$width_in_pixels)
 writeRaster(window_raster, filename, overwrite=TRUE)
 
 ## Unique land use classes in this window are 3, 9, 11, 12, 21, 22, 29, 33
@@ -33,6 +36,7 @@ unique_mapbiomas_classes <- sort(unique(c(window, recursive=TRUE)))
 
 rare_mapbiomas_classes <- vector("numeric")
 for(class in unique_mapbiomas_classes) {
+    ## TODO Make 0.01 a parameter, pass it in via argparse, include in output filenames?
     if(mean(window == class, na.rm=TRUE) < 0.01) {
         rare_mapbiomas_classes <- c(rare_mapbiomas_classes, class)
     }
@@ -86,44 +90,8 @@ dummy_params <- list(mu=rep(1/n_states, n_states),
                      pr_y=dummy_pr_y,
                      n_components=n_states)
 
-
-for(idx in seq_along(panel)) {
-    panel[[idx]]$point_id <- idx
-    panel[[idx]]$time <- seq_along(panel[[idx]]$y)
-}
-
-dtable <- rbindlist(Map(data.frame, panel))
-setkey(dtable, point_id)
-
-stopifnot(all(c("point_id", "time", "y") %in% names(dtable)))
-
-dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
-dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
-
-## Joint distribution of (Y_{t+1}, Y_{t})
-M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
-    with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
-})
-
-## Compute inverses once and pass them to get_min_distance_estimates / solnp
-M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
-
-## Joint distribution of (Y_{t+2}, Y_{t+1}, Y_{t})
-M_fixed_y_Y_joint_hat_list <- lapply(seq_len(dummy_params$n_components), function(fixed_y) {
-    lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
-        return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
-                    table(y_one_period_ahead, y)) / sum(dtable$time == fixed_t &
-                                                        !is.na(dtable$y_two_periods_ahead) &
-                                                        !is.na(dtable$y_one_period_ahead) &
-                                                        !is.na(dtable$y)))
-    })
-})
-
-md_estimates <- get_min_distance_estimates(dummy_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
-
 estimates <- get_hmm_and_minimum_distance_estimates_random_initialization(params=dummy_params, panel=panel)
 
-## TODO Compare to frequency transition probabilities (plot them, make sure they're saved to RDS)
 estimates$em_params_hat_best_likelihood
 
 estimates$mapbiomas_classes_to_keep <- mapbiomas_classes_to_keep
@@ -131,5 +99,5 @@ estimates$rare_mapbiomas_classes <- rare_mapbiomas_classes
 
 estimates$P_hat_frequency <- lapply(estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
 
-filename <- sprintf("estimates_window_%s_%s_width_%s.rds", row, col, width_in_pixels)
+filename <- sprintf("estimates_window_%s_%s_width_%s.rds", opt$row, opt$col, opt$width_in_pixels)
 saveRDS(estimates, file=filename)
