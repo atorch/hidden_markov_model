@@ -194,15 +194,18 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     ## Can happen if a certain Y is not observed at all (in the entire panel) at a certain time index
     M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
 
-    ## TODO Need to handle edge case where any of these matrices are not invertible, which might happen at small sample sizes
     ## Joint distribution of (Y_{t+2}, Y_{t+1}, Y_{t})
     M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
         lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
+            ## Note: we need to pass factors to table() so that it includes
+            ## rows and columns of zeros in cases where a certain class (factor level) isn't observed
+            levels <- seq_len(params0$n_components)
             return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
-                        table(y_one_period_ahead, y)) / sum(dtable$time == fixed_t &
-                                                            !is.na(dtable$y_two_periods_ahead) &
-                                                            !is.na(dtable$y_one_period_ahead) &
-                                                            !is.na(dtable$y)))
+                        table(factor(y_one_period_ahead, levels=levels),
+                              factor(y, levels=levels))) / sum(dtable$time == fixed_t &
+                                                               !is.na(dtable$y_two_periods_ahead) &
+                                                               !is.na(dtable$y_one_period_ahead) &
+                                                               !is.na(dtable$y)))
         })
     })
 
@@ -318,6 +321,9 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
         return(matrix(x[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
     stopifnot(length(candidate_M_S_joint_list) == length(M_Y_joint_hat_inverse_list))
+    ## TODO Instead of summing over all fixed_y, could use only those for which the matrix has the right shape
+    ## Rare class issue
+    ## TODO Or maybe the solution in this case is simply to make sure the Y_t, Y_t+1, Y_t+2 matrix has the right shape, even if it contains zeros?
     candidate_D_list <- lapply(seq_len(n_components), function(fixed_y) {
         lapply(seq_len(max_time - 2), function(fixed_t) {
             candidate_M_S_joint <- candidate_M_S_joint_list[[fixed_t + 1]]
@@ -330,7 +336,7 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
         })
     })
 
-    ## TODO This assumes n_components == 3
+    ## TODO This assumes n_components == 3, generalize
     if(abs(candidate_M_Y_given_S[1, 1] - candidate_M_Y_given_S[1, 2]) < 0) message('Close to non diag dom')
 
     stopifnot(length(candidate_D_list) == length(M_fixed_y_Y_joint_hat_list))  # Careful, lists of lists
