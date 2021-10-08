@@ -109,9 +109,11 @@ venv.bak/
 csv/*
 pickles/*
 plots/*
+*.Rhistory
 *.png
 *.rds
-*.Rhistory
+*.tif
+*.xml
 
 #notes_tr.txt#
 

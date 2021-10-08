@@ -8,10 +8,11 @@ source("src/hmm_functions.R")
 mapbiomas <- stack("HMM_MapBiomas_v2/mapbiomas.vrt")
 
 ## TODO Run this script in parallel with different input options
-opt_list <- list(make_option("--row", default=90400, type="integer"),
-                 make_option("--col", default=23500, type="integer"),
-                 make_option("--width_in_pixels", default=200, type="integer"),
-                 make_option("--class_frequency_cutoff", default=0.005, type="double"))
+opt_list <- list(make_option("--row", default=90000, type="integer"),
+                 make_option("--col", default=23000, type="integer"),
+                 make_option("--width_in_pixels", default=200, type="integer"),  # TODO Try larger windows to avoid rare class issues?
+                 make_option("--class_frequency_cutoff", default=0.005, type="double"),
+                 make_option("--n_random_starts", default=5, type="integer"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
@@ -91,46 +92,9 @@ dummy_params <- list(mu=rep(1/n_states, n_states),
                      pr_y=dummy_pr_y,
                      n_components=n_states)
 
-for(idx in seq_along(panel)) {
-    panel[[idx]]$point_id <- idx
-    panel[[idx]]$time <- seq_along(panel[[idx]]$y)
-}
-
-dtable <- rbindlist(Map(data.frame, panel))
-setkey(dtable, point_id)
-
-stopifnot(all(c("point_id", "time", "y") %in% names(dtable)))
-
-dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
-dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
-
-## Joint distribution of (Y_{t+1}, Y_{t})
-M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
-    with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
-})
-
-## Compute inverses once and pass them to get_min_distance_estimates / solnp
-M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
-
-## Joint distribution of (Y_{t+2}, Y_{t+1}, Y_{t})
-M_fixed_y_Y_joint_hat_list <- lapply(seq_len(dummy_params$n_components), function(fixed_y) {
-    lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
-        ## Note: we need to pass factors to table() so that it includes
-        ## rows and columns of zeros in cases where a certain class (factor level) isn't observed
-        levels <- seq_len(dummy_params$n_components)
-        return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
-                    table(factor(y_one_period_ahead, levels=levels),
-                          factor(y, levels=levels))) / sum(dtable$time == fixed_t &
-                                                           !is.na(dtable$y_two_periods_ahead) &
-                                                           !is.na(dtable$y_one_period_ahead) &
-                                                           !is.na(dtable$y)))
-    })
-})
-
-md_estimates <- get_min_distance_estimates(dummy_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable)
-
-## TODO Do we really need 10 initializations for EM?  Do they end up in different places?  Make it a fn argument (and optparse)
-estimates <- get_hmm_and_minimum_distance_estimates_random_initialization(params=dummy_params, panel=panel, n_random_starts=5)
+estimates <- get_hmm_and_minimum_distance_estimates_random_initialization(params=dummy_params,
+                                                                          panel=panel,
+                                                                          n_random_starts=opt$n_random_starts)
 
 estimates$em_params_hat_best_likelihood
 
