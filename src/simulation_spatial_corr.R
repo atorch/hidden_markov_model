@@ -27,11 +27,6 @@ run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_pe
                       pixel_j=seq_len(n_pixels_per_side),
                       field_id=0)
 
-    if(params0$include_z_in_simulation) {
-        ## TODO Speed up Ising simulation if possible. Do we need to increase n_iter?
-        df$z <- simulate_ising(n_pixels=nrow(df), adjacency=adjacency, beta=params0$ising_beta, n_iter=50)
-    }
-
     n_fields_per_side <- sqrt(n_fields)
 
     field_edges <- expand.grid(pixel_i=seq(1, n_pixels_per_side, n_pixels_per_side / n_fields_per_side),
@@ -44,20 +39,45 @@ run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_pe
         df[df$pixel_i >= cutoff_i & df$pixel_j >= cutoff_j, ]$field_id <- field_id
     }
 
+    if(params0$include_z_in_simulation) {
+        if(params0$z_constant_over_time) {
+            df$z <- simulate_ising(n_pixels=nrow(df), adjacency=adjacency, beta=params0$ising_beta, n_iter=50)
+        } else {
+            ## If Z is not constant over time, it is i.i.d. over time
+            n_time_periods <- length(fields[[1]]$state)
+            for(time in seq_len(n_time_periods)) {
+                z_colname <- sprintf("z_%s", time)
+                df[, z_colname] <- simulate_ising(n_pixels=nrow(df), adjacency=adjacency, beta=params0$ising_beta, n_iter=50)
+            }
+        }
+    }
+
     pixel_panel <- lapply(seq_len(nrow(df)), function(row_index, params=params0) {
+
         field_id <- df[row_index, ]$field_id
         pixel_i <- df[row_index, ]$pixel_i
         pixel_j <- df[row_index, ]$pixel_j
- 
-        if(params$include_z_in_simulation) {
-            z <- df[row_index, ]$z
-        }
 
-        field_state <- fields[[field_id]]$state
-        y <- vapply(field_state, function(s) {
+        ## If Z is included in the simulation, construct a vector z
+        ## of the same length as the hidden state (i.e. one value per time period)
+        n_time_periods <- length(fields[[field_id]]$state)
+        if(params$include_z_in_simulation) {
+            if(params0$z_constant_over_time) {
+                z <- as.numeric(rep(df[row_index, ]$z, n_time_periods))
+            } else {
+                z_colnames <- sapply(seq_len(n_time_periods), function(t) sprintf("z_%s", t))
+                z <- as.numeric(df[row_index, z_colnames])
+            }
+        } else {
+            z <- rep(NA, n_time_periods)
+        }
+        stopifnot(length(z) == n_time_periods)
+
+        y <- vapply(seq_len(n_time_periods), function(time) {
+            s <- fields[[field_id]]$state[time]
             if(params$include_z_in_simulation) {
-                if(z == 1) {
-                    sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_cloudy[s, ])
+                if(z[time] == 1) {
+                    sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_given_cloudy[s, ])
                 } else {
                     sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y_given_clear[s, ])
                 }
@@ -66,17 +86,17 @@ run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_pe
             }
         }, FUN.VALUE=1)
         time <- seq_along(y)
-        
+
         if(params$pr_missing_data > 0) {
             ## Observations Y are MCAR (missing completely at random)
             mask <- runif(length(y)) < params$pr_missing_data
             y[mask] <- NA
         }
-        
-        return(list(field_state=field_state,
+
+        return(list(field_state=fields[[field_id]]$state,
                     field_id=field_id,
                     y=y,
-                    z=ifelse(params0$include_z_in_simulation, z, NA),
+                    z=z,
                     time=time,
                     pixel_i=pixel_i,
                     pixel_j=pixel_j))
@@ -110,19 +130,21 @@ n_pixels_per_side <- 100
 adjacency <- adjacency.matrix(m=n_pixels_per_side, n=n_pixels_per_side)
 
 ## TODO Bump back up
-n_simulations <- 25
+n_simulations <- 50
 
-for(pr_missing_data in c(0.1, 0.0)) {    
-    for(include_z_in_simulation in c(FALSE, TRUE)) {
+for(pr_missing_data in c(0.0, 0.1)) {
+    for(include_z_in_simulation in c(TRUE, FALSE)) {
 
         if(include_z_in_simulation) {
-            ising_beta_values <- c(0.0, 1.0, 2.0)
+            ising_beta_values <- c(0.0, 2.0)
+            ## Note: if Z is not constant over time, it is i.i.d. over time
+            params0$z_constant_over_time <- FALSE
         } else {
             ## Note: the Ising beta parameter has no effect when we don't include Z in the simulation
             ising_beta_values <- c(0.0)
         }
 
-        for(n_fields in c(10000, 400, 100)) {
+        for(n_fields in c(10000, 100)) {
             for(ising_beta in ising_beta_values) {
 
                 params0$include_z_in_simulation <- include_z_in_simulation
@@ -159,10 +181,20 @@ for(pr_missing_data in c(0.1, 0.0)) {
         
                 stopCluster(cluster)
 
-                simulations_filename <- sprintf("spatial_corr_n_fields_%s_pr_missing_data_%s_include_z_%s_ising_beta_%s_%s_simulations.rds",
+                z_correlation_description <- ""
+                if(include_z_in_simulation) {
+                    if(params0$z_constant_over_time) {
+                        z_correlation_description <- "_constant_over_time"
+                    } else {
+                        z_correlation_description <- "_iid_over_time"
+                    }
+                }
+
+                simulations_filename <- sprintf("spatial_corr_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.rds",
                                                 params0$n_fields,
                                                 pr_missing_data,
                                                 include_z_in_simulation,
+                                                z_correlation_description,
                                                 params0$ising_beta,
                                                 n_simulations)
                 saveRDS(simulations, simulations_filename)
@@ -204,11 +236,16 @@ for(pr_missing_data in c(0.1, 0.0)) {
 
                 field_width <- n_pixels_per_side / sqrt(n_fields)
 
-                z_description <- ifelse(include_z_in_simulation, sprintf("Ising Beta = %s", params0$ising_beta), "No Z")
+                z_title_description <- "No Z"
+                if(include_z_in_simulation) {
+                    z_title_description <- sprintf("%s, Ising Beta = %s",
+                                                   ifelse(params0$z_constant_over_time, "Z Constant Over Time", "Z I.I.D. Over Time"),
+                                                   params0$ising_beta)
+                }
                 missing_data_description <- ifelse(pr_missing_data > 0, sprintf("Observations %s MCAR", pr_missing_data), "No Missing Data")
                 title <- sprintf("%s Simulations, %s\n%s-by-%s Pixel Fields, %s",
                                  n_simulations,
-                                 z_description,
+                                 z_title_description,
                                  field_width,
                                  field_width,
                                  missing_data_description)
@@ -223,11 +260,12 @@ for(pr_missing_data in c(0.1, 0.0)) {
                       theme(plot.title = element_text(hjust = 0.5)) +
                       facet_grid(state_label ~ time_label))
                 p
-                filename <- sprintf("simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     "estimated_transition_probabilities",
                                     params0$n_fields,
                                     pr_missing_data,
                                     include_z_in_simulation,
+                                    z_correlation_description,
                                     params0$ising_beta,
                                     n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
@@ -248,10 +286,12 @@ for(pr_missing_data in c(0.1, 0.0)) {
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
 
-                filename <- sprintf("simulation_spatial_corr_true_field_state_n_fields_%s_pr_missing_data_%s_include_z_%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+                                    "simulation_spatial_corr_true_field_state",
                                     params0$n_fields,
                                     pr_missing_data,
                                     include_z_in_simulation,
+                                    z_correlation_description,
                                     params0$ising_beta,
                                     n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
@@ -265,10 +305,12 @@ for(pr_missing_data in c(0.1, 0.0)) {
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
 
-                filename <- sprintf("simulation_spatial_corr_classification_errors_n_fields_%s_pr_missing_data_%s_include_z_%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+                                    "simulation_spatial_corr_classification_errors",
                                     params0$n_fields,
                                     pr_missing_data,
                                     include_z_in_simulation,
+                                    z_correlation_description,
                                     params0$ising_beta,
                                     n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
@@ -280,10 +322,11 @@ for(pr_missing_data in c(0.1, 0.0)) {
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
 
-                filename <- sprintf("simulation_spatial_corr_z_static_clouds_haze_n_fields_%s_pr_missing_data_%s_include_z_%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("simulation_spatial_corr_z_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     params0$n_fields,
                                     pr_missing_data,
                                     include_z_in_simulation,
+                                    z_correlation_description,
                                     params0$ising_beta,
                                     n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
@@ -295,10 +338,11 @@ for(pr_missing_data in c(0.1, 0.0)) {
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
 
-                filename <- sprintf("simulation_spatial_corr_observed_y_n_fields_%s_pr_missing_data_%s_include_z_%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("simulation_spatial_corr_observed_y_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     params0$n_fields,
                                     pr_missing_data,
                                     include_z_in_simulation,
+                                    z_correlation_description,
                                     params0$ising_beta,
                                     n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
