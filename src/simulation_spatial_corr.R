@@ -117,28 +117,28 @@ params0 <- get_params0()
 params0$pr_y
 
 ## Values for Pr[Y | S, Z] used when include_z_in_simulation is true
-params0$pr_y_given_cloudy <- rbind(c(0.82, 0.18),
-                                   c(0.3, 0.7))
+params0$pr_y_given_cloudy <- rbind(c(0.81, 0.19),
+                                   c(0.33, 0.67))
 params0$pr_y_given_clear <- 2 * params0$pr_y - params0$pr_y_given_cloudy
 
 ## Sanity check
-all(0.5 * params0$pr_y_given_clear + 0.5*params0$pr_y_given_cloudy == params0$pr_y)
-all(params0$pr_y_given_clear <= 1)
+stopifnot(all(0.5 * params0$pr_y_given_clear + 0.5*params0$pr_y_given_cloudy == params0$pr_y))
+stopifnot(all(params0$pr_y_given_clear <= 1))
 
 ## Observations are arranged in a square matrix of n_pixels_per_side^2 pixels in all simulations
 n_pixels_per_side <- 100
 adjacency <- adjacency.matrix(m=n_pixels_per_side, n=n_pixels_per_side)
 
 ## TODO Bump back up
-n_simulations <- 50
+n_simulations <- 55
 
 for(pr_missing_data in c(0.0, 0.1)) {
     for(include_z_in_simulation in c(TRUE, FALSE)) {
 
         if(include_z_in_simulation) {
-            ising_beta_values <- c(0.0, 2.0)
+            ising_beta_values <- c(2.0, 0.0)
             ## Note: if Z is not constant over time, it is i.i.d. over time
-            params0$z_constant_over_time <- FALSE
+            params0$z_constant_over_time <- TRUE
         } else {
             ## Note: the Ising beta parameter has no effect when we don't include Z in the simulation
             ising_beta_values <- c(0.0)
@@ -171,7 +171,9 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                          "simulate_ising",
                                          "valid_panel_element",
                                          "valid_parameters"))
-            
+
+                message("Running simulation with params:")
+                print(params0)
                 simulations <- parLapply(cluster,
                                          seq_len(n_simulations),
                                          run_single_simulation,
@@ -204,6 +206,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
 
                 simulation_summaries <- lapply(simulations, function(simulation) {            
                     P_hat_naive <- lapply(simulation$estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
+                    ## TODO Estimated values for pr_y
                     data.table(em_estimated_transition_1_2=sapply(simulation$estimates$em_params_hat_best_likelihood$P_list, function(x) return(x[1, 2])),
                                md_estimated_transition_1_2=sapply(simulation$estimates$min_dist_params_hat_best_objfn$P_list, function(x) return(x[1, 2])),
                                naive_estimated_transition_1_2=sapply(P_hat_naive, function(x) return(x[1, 2])),
