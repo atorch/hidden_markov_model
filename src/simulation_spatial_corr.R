@@ -118,7 +118,7 @@ params0$pr_y
 
 ## Values for Pr[Y | S, Z] used when include_z_in_simulation is true
 params0$pr_y_given_cloudy <- rbind(c(0.81, 0.19),
-                                   c(0.33, 0.67))
+                                   c(0.39, 0.61))
 params0$pr_y_given_clear <- 2 * params0$pr_y - params0$pr_y_given_cloudy
 
 ## Sanity check
@@ -204,9 +204,66 @@ for(pr_missing_data in c(0.0, 0.1)) {
                 ## TODO Include summary stats about Z in simulation summary?  Should be around 50-50 for high and low "clouds"
                 ## TODO Include estimates of pr_y in simulation summary
 
+                simulation_summaries_pr_y <- lapply(simulations, function(simulation) {
+                    data.table(
+                        em_estimated_pr_y_1_1=simulation$estimates$em_params_hat_best_likelihood$pr_y[1, 1],
+                        md_estimated_pr_y_1_1=simulation$estimates$min_dist_params_hat_best_objfn$pr_y[1, 1],
+                        true_pr_y_1_1=params0$pr_y[1, 1],
+                        em_estimated_pr_y_2_2=simulation$estimates$em_params_hat_best_likelihood$pr_y[2, 2],
+                        md_estimated_pr_y_2_2=simulation$estimates$min_dist_params_hat_best_objfn$pr_y[2, 2],
+                        true_pr_y_2_2=params0$pr_y[2, 2],
+                        simulation_id=simulation$simulation_id
+                    )
+                })
+
+                simulation_summary_pr_y <- rbindlist(simulation_summaries_pr_y)
+
+                simulation_summary_pr_y_melt <- melt(simulation_summary_pr_y,
+                                                     id.vars=c("simulation_id", "true_pr_y_1_1", "true_pr_y_2_2"))
+
+                simulation_summary_pr_y_melt[variable %like% "em_", algorithm := "ML"]
+                simulation_summary_pr_y_melt[variable %like% "md_", algorithm := "MD"]
+
+                simulation_summary_pr_y_melt[, algorithm := factor(algorithm, levels=c("ML", "MD"))]
+
+                simulation_summary_pr_y_melt[variable %like% "pr_y_1_1", pr_y_label := "Pr[ Y=1 | S=1 ]"]
+                simulation_summary_pr_y_melt[variable %like% "pr_y_2_2", pr_y_label := "Pr[ Y=2 | S=2 ]"]
+
+                simulation_summary_pr_y_melt[, true_transition := ifelse(pr_y_label == "Pr[ Y=1 | S=1 ]", true_pr_y_1_1, true_pr_y_2_2)]
+
+                field_width <- n_pixels_per_side / sqrt(n_fields)
+                z_title_description <- "No Z"
+                if(include_z_in_simulation) {
+                    z_title_description <- sprintf("%s, Ising Beta = %s",
+                                                   ifelse(params0$z_constant_over_time, "Z Constant Over Time", "Z I.I.D. Over Time"),
+                                                   params0$ising_beta)
+                }
+                missing_data_description <- ifelse(pr_missing_data > 0, sprintf("Observations %s MCAR", pr_missing_data), "No Missing Data")
+                title <- sprintf("%s Simulations, %s\n%s-by-%s Pixel Fields, %s",
+                                 n_simulations,
+                                 z_title_description,
+                                 field_width,
+                                 field_width,
+                                 missing_data_description)
+
+                p <- (ggplot(simulation_summary_pr_y_melt, aes(x=algorithm, y=value)) +
+                      geom_boxplot() +
+                      ylab("probability") +
+                      ggtitle(title) +
+                      facet_wrap(~ pr_y_label) +
+                      geom_hline(aes(yintercept=true_transition), linetype="dashed"))
+                filename <- sprintf("simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+                                    "estimated_pr_y",
+                                    params0$n_fields,
+                                    pr_missing_data,
+                                    include_z_in_simulation,
+                                    z_correlation_description,
+                                    params0$ising_beta,
+                                    n_simulations)
+                ggsave(filename, plot=p, width=6, height=4, units="in")
+
                 simulation_summaries <- lapply(simulations, function(simulation) {            
                     P_hat_naive <- lapply(simulation$estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
-                    ## TODO Estimated values for pr_y
                     data.table(em_estimated_transition_1_2=sapply(simulation$estimates$em_params_hat_best_likelihood$P_list, function(x) return(x[1, 2])),
                                md_estimated_transition_1_2=sapply(simulation$estimates$min_dist_params_hat_best_objfn$P_list, function(x) return(x[1, 2])),
                                naive_estimated_transition_1_2=sapply(P_hat_naive, function(x) return(x[1, 2])),
@@ -221,7 +278,6 @@ for(pr_missing_data in c(0.0, 0.1)) {
     
                 simulation_summary <- rbindlist(simulation_summaries)
 
-                ## TODO Make sure this is working correctly when including both 1->2 and 2->1 transition probability estimates
                 simulation_summary_melt  <- melt(simulation_summary, id.vars=c("simulation_id", "time", "true_transition_1_2", "true_transition_2_1"))
     
                 simulation_summary_melt$time_label <- sprintf("time %s to %s", simulation_summary_melt$time, simulation_summary_melt$time+1)
@@ -235,23 +291,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
 
                 simulation_summary_melt[, true_transition := ifelse(state_label == "state 1 to 2", true_transition_1_2, true_transition_2_1)]
     
-                simulation_summary_melt[, algorithm := factor(algorithm, levels=c("Frequency", "ML", "MD"))]
-
-                field_width <- n_pixels_per_side / sqrt(n_fields)
-
-                z_title_description <- "No Z"
-                if(include_z_in_simulation) {
-                    z_title_description <- sprintf("%s, Ising Beta = %s",
-                                                   ifelse(params0$z_constant_over_time, "Z Constant Over Time", "Z I.I.D. Over Time"),
-                                                   params0$ising_beta)
-                }
-                missing_data_description <- ifelse(pr_missing_data > 0, sprintf("Observations %s MCAR", pr_missing_data), "No Missing Data")
-                title <- sprintf("%s Simulations, %s\n%s-by-%s Pixel Fields, %s",
-                                 n_simulations,
-                                 z_title_description,
-                                 field_width,
-                                 field_width,
-                                 missing_data_description)
+                simulation_summary_melt[, algorithm := factor(algorithm, levels=c("Frequency", "ML", "MD"))]                
 
                 p <- (ggplot(simulation_summary_melt, aes(y=value, x=algorithm, group=variable)) +
                       geom_boxplot() +
