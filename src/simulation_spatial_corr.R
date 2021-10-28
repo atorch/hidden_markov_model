@@ -1,5 +1,6 @@
 library(data.table)
 library(ggplot2)
+library(optparse)
 library(parallel)
 
 source("hmm_functions.R")
@@ -7,6 +8,12 @@ source("hmm_parameters.R")
 source("ising.R")
 
 set.seed(321123)
+
+opt_list <- list(make_option("--n_simulations", default=50, type="integer"),
+                 make_option("--z_constant_over_time", action="store_true", default=FALSE))
+opt <- parse_args(OptionParser(option_list=opt_list))
+
+message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
 run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_per_side) {
 
@@ -129,16 +136,14 @@ stopifnot(all(params0$pr_y_given_clear <= 1))
 n_pixels_per_side <- 100
 adjacency <- adjacency.matrix(m=n_pixels_per_side, n=n_pixels_per_side)
 
-## TODO Bump back up
-n_simulations <- 55
+## Note: if Z is not constant over time, it is i.i.d. over time
+params0$z_constant_over_time <- opt$z_constant_over_time
 
 for(pr_missing_data in c(0.0, 0.1)) {
     for(include_z_in_simulation in c(TRUE, FALSE)) {
 
         if(include_z_in_simulation) {
-            ising_beta_values <- c(2.0, 0.0)
-            ## Note: if Z is not constant over time, it is i.i.d. over time
-            params0$z_constant_over_time <- TRUE
+            ising_beta_values <- c(2.0, 0.0)                        
         } else {
             ## Note: the Ising beta parameter has no effect when we don't include Z in the simulation
             ising_beta_values <- c(0.0)
@@ -175,7 +180,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                 message("Running simulation with params:")
                 print(params0)
                 simulations <- parLapply(cluster,
-                                         seq_len(n_simulations),
+                                         seq_len(opt$n_simulations),
                                          run_single_simulation,
                                          params0=params0,
                                          adjacency=adjacency,
@@ -198,11 +203,10 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                                 include_z_in_simulation,
                                                 z_correlation_description,
                                                 params0$ising_beta,
-                                                n_simulations)
+                                                opt$n_simulations)
                 saveRDS(simulations, simulations_filename)
 
                 ## TODO Include summary stats about Z in simulation summary?  Should be around 50-50 for high and low "clouds"
-                ## TODO Include estimates of pr_y in simulation summary
 
                 simulation_summaries_pr_y <- lapply(simulations, function(simulation) {
                     data.table(
@@ -240,7 +244,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                 }
                 missing_data_description <- ifelse(pr_missing_data > 0, sprintf("Observations %s MCAR", pr_missing_data), "No Missing Data")
                 title <- sprintf("%s Simulations, %s\n%s-by-%s Pixel Fields, %s",
-                                 n_simulations,
+                                 opt$n_simulations,
                                  z_title_description,
                                  field_width,
                                  field_width,
@@ -249,7 +253,9 @@ for(pr_missing_data in c(0.0, 0.1)) {
                 p <- (ggplot(simulation_summary_pr_y_melt, aes(x=algorithm, y=value)) +
                       geom_boxplot() +
                       ylab("probability") +
+                      theme_bw() +
                       ggtitle(title) +
+                      theme(plot.title = element_text(hjust = 0.5)) +
                       facet_wrap(~ pr_y_label) +
                       geom_hline(aes(yintercept=true_transition), linetype="dashed"))
                 filename <- sprintf("simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
@@ -259,7 +265,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                     include_z_in_simulation,
                                     z_correlation_description,
                                     params0$ising_beta,
-                                    n_simulations)
+                                    opt$n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
 
                 simulation_summaries <- lapply(simulations, function(simulation) {            
@@ -299,8 +305,8 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       ylab("transition probability") +
                       theme_bw() +
                       ggtitle(title) +
-                      ylim(c(0, 0.65)) +
                       theme(plot.title = element_text(hjust = 0.5)) +
+                      ylim(c(0, 0.65)) +                      
                       facet_grid(state_label ~ time_label))
                 p
                 filename <- sprintf("simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
@@ -310,7 +316,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                     include_z_in_simulation,
                                     z_correlation_description,
                                     params0$ising_beta,
-                                    n_simulations)
+                                    opt$n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
 
                 ## These are plots showing a single simulation in detail
@@ -336,7 +342,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                     include_z_in_simulation,
                                     z_correlation_description,
                                     params0$ising_beta,
-                                    n_simulations)
+                                    opt$n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
 
                 title <- sprintf("Overall Misclassification Rate: %s", round(mean(dtable$classification_error, na.rm=TRUE), 3))
@@ -344,6 +350,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       facet_wrap(~ time_label) +
                       geom_raster() +
                       ggtitle(title) +
+                      theme(plot.title = element_text(hjust = 0.5)) +
                       scale_fill_manual("classification outcome", values=c("grey", "red")) +
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
@@ -355,7 +362,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                     include_z_in_simulation,
                                     z_correlation_description,
                                     params0$ising_beta,
-                                    n_simulations)
+                                    opt$n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
 
                 p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(z))) +
@@ -371,7 +378,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                     include_z_in_simulation,
                                     z_correlation_description,
                                     params0$ising_beta,
-                                    n_simulations)
+                                    opt$n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
 
                 p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(y))) +
@@ -387,12 +394,10 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                     include_z_in_simulation,
                                     z_correlation_description,
                                     params0$ising_beta,
-                                    n_simulations)
+                                    opt$n_simulations)
                 ggsave(filename, plot=p, width=6, height=4, units="in")
             }
         }
     }
 }
 
-## TODO Also save scatterplot showing frequency on x-axis, EM and MD on y-axis (or showing errors for all relative to true transition proba)
-## TODO Also save plot of estimates of misclassification probabilities
