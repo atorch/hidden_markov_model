@@ -1,5 +1,6 @@
 library(Rsolnp)
 library(data.table)
+library(ggplot2)
 library(optparse)
 library(raster)
 
@@ -10,7 +11,8 @@ mapbiomas <- stack("HMM_MapBiomas_v2/mapbiomas.vrt")
 ## TODO Run this script in parallel with different input options
 opt_list <- list(make_option("--row", default=90000, type="integer"),
                  make_option("--col", default=23000, type="integer"),
-                 make_option("--width_in_pixels", default=200, type="integer"),  # TODO Try larger windows to avoid rare class issues?
+                 make_option("--width_in_pixels", default=500, type="integer"),
+                 make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
                  make_option("--n_random_starts", default=5, type="integer"))
 opt <- parse_args(OptionParser(option_list=opt_list))
@@ -48,6 +50,10 @@ for(class in unique_mapbiomas_classes) {
 ## Keeps classes 3 and 21 (forest and mosaic of pasture + agriculture)
 mapbiomas_classes_to_keep <- unique_mapbiomas_classes[!unique_mapbiomas_classes %in% rare_mapbiomas_classes]
 
+## TODO Drop points that are NA in every year
+## TODO Count the number of points that are NA in every year
+## TODO Sanity check, run Viterbi, save rasters, visualize
+
 ## Note that the set of unique observations varies by year!
 sort(unique(window[, 3]))
 sort(unique(window[, 4]))
@@ -56,7 +62,7 @@ sort(unique(window[, 4]))
 table(window[, 4])
 table(window[, 4]) / nrow(window)
 
-table(window)
+table(window)  # TODO Logic for skipping windows that aren't mainly forest + crops (skip if too much grassland, urban, etc)
 round(table(window) / (nrow(window) * ncol(window)), 4)
 
 ## Careful, there can be missing values!
@@ -64,8 +70,6 @@ mean(is.na(c(window, recursive=TRUE)))
 sum(is.na(c(window, recursive=TRUE)))
 
 window_recoded <- window
-
-## TODO We could collapse multiple mapbiomas classes together (instead of replacing rare classes with NAs)
 
 for(i in seq_along(mapbiomas_classes_to_keep)) {
     class <- mapbiomas_classes_to_keep[i]
@@ -79,7 +83,9 @@ table(window)
 table(window_recoded)
 mean(is.na(window_recoded))
 
-panel <- apply(window_recoded, 1, function(y) list(y=as.vector(y), time=seq_along(y)))
+full_panel <- apply(window_recoded, 1, function(y) list(y=as.vector(y), time=seq_along(y)))
+
+panel <- sample(full_panel, size=length(full_panel) * opt$subsample, replace=FALSE)
 
 ## These aren't actually used in optimization,
 ## they're just used to create other parameters of the same shape/dimension/time horizon
@@ -101,8 +107,34 @@ estimates$em_params_hat_best_likelihood
 estimates$mapbiomas_classes_to_keep <- mapbiomas_classes_to_keep
 estimates$rare_mapbiomas_classes <- rare_mapbiomas_classes
 
-estimates$P_hat_frequency <- lapply(estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
+estimates$P_hat_frequency <- lapply(estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)  # TODO Also save mapbiomas class counts (tables) in estimates
 
-filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s.rds",
-                    opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff)
+estimates$options <- opt
+
+filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s.rds",
+                    opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample)
 saveRDS(estimates, file=filename)
+
+for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
+    class <- estimates$mapbiomas_classes_to_keep[class_index]
+
+    ## Diagonals of the transition matrix (for example, Pr[ forest at t+1 | forest at t ])
+    P_hat_frequency <- sapply(estimates$P_hat_frequency, function(P) P[class_index, class_index])
+    P_hat_md <- sapply(estimates$min_dist_params_hat_best_objfn$P_list, function(P) P[class_index, class_index])
+    P_hat_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list, function(P) P[class_index, class_index])
+
+    df <- data.table(time_index=seq_along(P_hat_frequency), P_hat_frequency=P_hat_frequency, P_hat_md, P_hat_ml)
+    df_melted <- melt(df, id.vars="time_index")
+
+    title <- sprintf("Probability of Remaining in Mapbiomas Class %s", class)  # TODO Window info in title?
+    p <- (ggplot(df_melted, aes(x=time_index, y=value, group=variable, color=variable)) +
+          geom_point() +
+          geom_line() +
+          ggtitle(title) +
+          theme(plot.title = element_text(hjust = 0.5)) +
+          scale_color_discrete("algorithm") +
+          ylab("probability") +
+          theme_bw())
+    filename <- sprintf("transition_matrix_diagonals_window_%s_%s_width_%s_class_%s.png", opt$row, opt$col, opt$width_in_pixels, class)
+    ggsave(p, filename=filename, width=6, height=4, units="in")
+}

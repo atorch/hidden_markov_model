@@ -140,6 +140,7 @@ adjacency <- adjacency.matrix(m=n_pixels_per_side, n=n_pixels_per_side)
 params0$z_constant_over_time <- opt$z_constant_over_time
 
 for(pr_missing_data in c(0.0, 0.1)) {
+    ## TODO Make this a parameter
     for(include_z_in_simulation in c(TRUE, FALSE)) {
 
         if(include_z_in_simulation) {
