@@ -160,16 +160,6 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     require(data.table)
     require(Rsolnp)
 
-    random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
-
-    ## TODO How often are we hitting max_iter?  Make it a parameter
-    em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-        return(get_expectation_maximization_estimates(panel, initial_params, max_iter=40, epsilon=0.001))
-    })
-    em_likelihoods <- sapply(em_params_hat_list, function(x) {
-        return(max(x$loglik))
-    })
-
     for(idx in seq_along(panel)) {
         panel[[idx]]$point_id <- idx
         panel[[idx]]$time <- seq_along(panel[[idx]]$y)
@@ -209,6 +199,8 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
         })
     })
 
+    random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
+
     min_dist_params_hat <- lapply(random_initial_parameters,
                                   get_min_distance_estimates,
                                   M_Y_joint_hat_list=M_Y_joint_hat_list,
@@ -224,6 +216,14 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
 
     min_dist_pr_y_is_diag_dominant <- sapply(min_dist_params_hat, function(x) {
         return(is_diag_dominant(x$pr_y))
+    })
+
+    ## TODO How often are we hitting max_iter?  Make it a parameter
+    em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
+        return(get_expectation_maximization_estimates(panel, initial_params, max_iter=40, epsilon=0.001))
+    })
+    em_likelihoods <- sapply(em_params_hat_list, function(x) {
+        return(max(x$loglik))
     })
 
     em_params_hat_best_likelihood <- em_params_hat_list[[which.max(em_likelihoods)]]
