@@ -6,8 +6,8 @@ library(raster)
 
 source("src/hmm_functions.R")
 
-opt_list <- list(make_option("--row", default=90000, type="integer"),
-                 make_option("--col", default=23000, type="integer"),
+opt_list <- list(make_option("--row", default=88500, type="integer"),
+                 make_option("--col", default=20500, type="integer"),  # This row+col combination doesn't work because 100% NA at time index 8!
                  make_option("--width_in_pixels", default=500, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
@@ -47,6 +47,10 @@ window[window %in% c(11, 12)] <- 21
 ## Combine classes
 ## Class 9 (forest plantation) is combined with class 3 (forest)
 window[window == 9] <- 3
+
+## Combine classes
+## Class 22 (sand) is combined with class 33 (rivers and lakes)
+window[window == 22] <- 33
 
 ## See https://mapbiomas-br-site.s3.amazonaws.com/downloads/Colecction%206/Cod_Class_legenda_Col6_MapBiomas_BR.pdf
 unique_mapbiomas_classes <- sort(unique(c(window, recursive=TRUE)))
