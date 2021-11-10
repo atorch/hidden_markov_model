@@ -6,8 +6,8 @@ library(raster)
 
 source("src/hmm_functions.R")
 
-opt_list <- list(make_option("--row", default=88500, type="integer"),
-                 make_option("--col", default=20500, type="integer"),  # This row+col combination doesn't work because 100% NA at time index 8!
+opt_list <- list(make_option("--row", default=85500, type="integer"),
+                 make_option("--col", default=23000, type="integer"),
                  make_option("--width_in_pixels", default=500, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
@@ -27,11 +27,16 @@ dim(window)
 
 window_extent <- extent(mapbiomas, opt$row, opt$row + opt$width_in_pixels, opt$col, opt$col + opt$width_in_pixels)
 window_raster<- raster(window_extent, crs=crs(mapbiomas), nrows=opt$width_in_pixels, ncols=opt$width_in_pixels)
-values(window_raster) <- window[, 1]
-
-filename <- sprintf("raster_window_%s_%s_width_%s_band_1.tif", opt$row, opt$col, opt$width_in_pixels)
-writeRaster(window_raster, filename, overwrite=TRUE)
-
+for(time_index in c(1, 8)) {
+    values(window_raster) <- window[, time_index]
+    ## TODO Very high missing data rates at time_index 8 in certain windows, inspect  Try larger windows, 1k by 1k pixels?
+    ## TODO mean(is.na(window[, 8])) is high in certain windows, am I missing a file?
+    ## Skip early years?
+    filename <- sprintf("raster_window_%s_%s_width_%s_band_%s.tif", opt$row, opt$col, opt$width_in_pixels, time_index)
+    message("Writing ", filename)
+    writeRaster(window_raster, filename, overwrite=TRUE)
+}
+## TODO Logic to skip window entirely if 100% missing (in any year), if 100% water, etc, put logic in a function
 class_frequencies_before_combining <- round(table(window) / (nrow(window) * ncol(window)), 4)
 
 ## Examine class 33 (rivers, lakes, ocean)
@@ -125,7 +130,7 @@ dummy_params <- list(mu=rep(1/n_states, n_states),
 
 estimates <- get_hmm_and_minimum_distance_estimates_random_initialization(params=dummy_params,
                                                                           panel=panel,
-                                                                          n_random_starts=opt$n_random_starts)
+                                                                          n_random_starts=opt$n_random_starts)  # TODO Allow fn to return only ML estimates if MD errors out (and rename this function!!!)
 
 ## TODO Check for transitions from grassland to forest/agriculture
 estimates$P_hat_frequency <- lapply(estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
@@ -136,6 +141,7 @@ estimates$class_frequencies <- class_frequencies
 estimates$class_frequencies_before_combining <- class_frequencies_before_combining
 
 estimates$options <- opt
+estimates$window_bbox <- as.data.frame(bbox(window_extent))
 
 filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes.rds",
                     opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample)

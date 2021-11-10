@@ -19,15 +19,22 @@ for(filename in estimate_filenames) {
                          time_index=seq_along(pr_remain_forest_ml),
                          window_row=estimates$options$row,
                          window_col=estimates$options$col)
+
+        ## TODO Get window lat lon from window_bbox, if necessary
         df$pr_y_diag_dominant_ml <- all(diag(estimates$em_params_hat_best_likelihood$pr_y) > 0.51)
         df$pr_y_diag_dominant_md <- all(diag(estimates$min_dist_params_hat_best_objfn$pr_y) > 0.51)  # Might be exactly 0.50 (hits constraint)
         df$n_mapbiomas_classes <- length(estimates$mapbiomas_classes_to_keep)
+
         estimate_dfs[[length(estimate_dfs) + 1]] <- df
+    } else {
+        message(filename, " doesn't contain class ", forest_class, ", skipping")
     }
 }
 
 df <- do.call(rbind, estimate_dfs)
-write.csv(df, "estimated_deforestation_rates.csv", row.names=FALSE)  # TODO Put date in filename
+filename <- sprintf("estimated_deforestation_rates_%s.csv", format(Sys.time(), "%Y_%m_%d"))
+message("Writing ", filename, ", dataframe dim is ", nrow(df), " by ", ncol(df))
+write.csv(df, filename, row.names=FALSE)
 
 p <- (ggplot(df, aes(x=deforestation_rate_freq, y=deforestation_rate_ml)) +
       geom_abline(slope=1, lty=2, alpha=0.5) +
@@ -39,6 +46,8 @@ ggsave(p, filename=filename, width=6, height=4, units="in")
 p <- (ggplot(subset(df, pr_y_diag_dominant_ml), aes(x=deforestation_rate_freq, y=deforestation_rate_ml)) +
       geom_abline(slope=1, lty=2, alpha=0.5) +
       geom_point(alpha=0.5) +
-      theme_bw())
+      ggtitle("Windows where estimated Pr[ Y | S ] is diag dominant") +
+      theme_bw() +
+      theme(plot.title = element_text(hjust = 0.5)))
 filename <- "estimated_deforestation_rates_diag_dominant.png"
 ggsave(p, filename=filename, width=6, height=4, units="in")
