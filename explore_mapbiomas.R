@@ -6,8 +6,8 @@ library(raster)
 
 source("src/hmm_functions.R")
 
-opt_list <- list(make_option("--row", default=85500, type="integer"),
-                 make_option("--col", default=23000, type="integer"),
+opt_list <- list(make_option("--row", default=83000, type="integer"),
+                 make_option("--col", default=24000, type="integer"),
                  make_option("--width_in_pixels", default=500, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
@@ -42,11 +42,22 @@ class_frequencies_before_combining <- round(table(window) / (nrow(window) * ncol
 pr_missing <- mean(is.na(window))
 pr_water_or_sand <- mean(window %in% c(22, 33))
 if(pr_missing > 0.9 || pr_water_or_sand > 0.5) {
-    message("Window ", opt$row, " ", opt$col, " is ",
-            pr_missing, " missing, ",
-            pr_water_or_sand, " water or sand, ",
+    message("Window ", opt$row, " ", opt$col, " is missing at rate ",
+            pr_missing, ", ",
+            pr_water_or_sand, " water or sand (averaging over all bands), ",
             "skipping estimation")
     quit()
+}
+
+n_years <- ncol(window)
+for(time_index in seq_len(n_years)) {
+    pr_missing <- mean(is.na(window[, time_index]))
+    if(pr_missing > 0.9) {
+        message("Window ", opt$row, " ", opt$col, " is missing at rate ",
+                pr_missing, " at time index (i.e. band) ", time_index,
+                ", skipping estimation")
+        quit()
+    }
 }
 
 ## Examine class 33 (rivers, lakes, ocean)

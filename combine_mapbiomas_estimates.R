@@ -45,7 +45,7 @@ ggsave(p, filename=filename, width=6, height=4, units="in")
 
 p <- (ggplot(subset(df, pr_y_diag_dominant_ml), aes(x=deforestation_rate_freq, y=deforestation_rate_ml)) +
       geom_abline(slope=1, lty=2, alpha=0.5) +
-      geom_point(alpha=0.5) +
+      geom_point(alpha=0.25) +
       ggtitle("Windows where estimated Pr[ Y | S ] is diag dominant") +
       theme_bw() +
       theme(plot.title = element_text(hjust = 0.5)))
