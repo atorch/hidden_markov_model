@@ -30,14 +30,24 @@ window_raster<- raster(window_extent, crs=crs(mapbiomas), nrows=opt$width_in_pix
 for(time_index in c(1, 8)) {
     values(window_raster) <- window[, time_index]
     ## TODO Very high missing data rates at time_index 8 in certain windows, inspect  Try larger windows, 1k by 1k pixels?
-    ## TODO mean(is.na(window[, 8])) is high in certain windows, am I missing a file?
+    ## mean(is.na(window[, 8])) is high in certain windows
     ## Skip early years?
     filename <- sprintf("raster_window_%s_%s_width_%s_band_%s.tif", opt$row, opt$col, opt$width_in_pixels, time_index)
     message("Writing ", filename)
     writeRaster(window_raster, filename, overwrite=TRUE)
 }
-## TODO Logic to skip window entirely if 100% missing (in any year), if 100% water, etc, put logic in a function
+
 class_frequencies_before_combining <- round(table(window) / (nrow(window) * ncol(window)), 4)
+
+pr_missing <- mean(is.na(window))
+pr_water_or_sand <- mean(window %in% c(22, 33))
+if(pr_missing > 0.9 || pr_water_or_sand > 0.5) {
+    message("Window ", opt$row, " ", opt$col, " is ",
+            pr_missing, " missing, ",
+            pr_water_or_sand, " water or sand, ",
+            "skipping estimation")
+    quit()
+}
 
 ## Examine class 33 (rivers, lakes, ocean)
 ## In how many years are pixels classified as class 33?
