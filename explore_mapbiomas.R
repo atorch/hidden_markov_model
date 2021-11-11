@@ -5,17 +5,19 @@ library(optparse)
 library(raster)
 
 source("src/hmm_functions.R")
+mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 
 opt_list <- list(make_option("--row", default=83000, type="integer"),
                  make_option("--col", default=24000, type="integer"),
                  make_option("--width_in_pixels", default=500, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
-                 make_option("--n_random_starts", default=5, type="integer"))
+                 make_option("--n_random_starts", default=5, type="integer"),
+                 make_option("--grassland_as_forest", default=FALSE, action="store_true"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
-mapbiomas <- stack("HMM_MapBiomas_v2/mapbiomas.vrt")
+mapbiomas <- stack(mapBioMassFile)
 nlayers(mapbiomas)
 
 window <- getValuesBlock(mapbiomas,
@@ -23,9 +25,8 @@ window <- getValuesBlock(mapbiomas,
                          col=opt$col,
                          nrows=opt$width_in_pixels,
                          ncols=opt$width_in_pixels)
-dim(window)
 
-window_extent <- extent(mapbiomas, opt$row, opt$row + opt$width_in_pixels, opt$col, opt$col + opt$width_in_pixels)
+
 window_raster<- raster(window_extent, crs=crs(mapbiomas), nrows=opt$width_in_pixels, ncols=opt$width_in_pixels)
 for(time_index in c(1, 8)) {
     values(window_raster) <- window[, time_index]
@@ -49,6 +50,7 @@ if(pr_missing > 0.9 || pr_water_or_sand > 0.5) {
     quit()
 }
 
+
 n_years <- ncol(window)
 for(time_index in seq_len(n_years)) {
     pr_missing <- mean(is.na(window[, time_index]))
@@ -67,16 +69,16 @@ table(rowSums(window == 33, na.rm=TRUE))
 window[which(!rowSums(window == 33, na.rm=TRUE) %in% c(0, ncol(window)))[1], ]
 
 ## Combine classes
-## Classes {11, 12} (wetlands and grassland) are combined with class 21 (agriculture and pasture)
-window[window %in% c(11, 12)] <- 21
+## Classe 12 (grassland) is optionally combined with class 3 (forest)
+if (opt$grassland_as_forest) window[window %in% 12] <- 21
 
 ## Combine classes
 ## Class 9 (forest plantation) is combined with class 3 (forest)
 window[window == 9] <- 3
 
 ## Combine classes
-## Class 22 (sand) is combined with class 33 (rivers and lakes)
-window[window == 22] <- 33
+## Class 11 (wetlands) and class 22 (sand) are combined with class 33 (rivers and lakes)
+window[window %in% c(11,22)] <- 33
 
 ## See https://mapbiomas-br-site.s3.amazonaws.com/downloads/Colecction%206/Cod_Class_legenda_Col6_MapBiomas_BR.pdf
 unique_mapbiomas_classes <- sort(unique(c(window, recursive=TRUE)))
