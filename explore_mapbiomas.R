@@ -7,8 +7,8 @@ library(raster)
 source("src/hmm_functions.R")
 mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 
-opt_list <- list(make_option("--row", default=83000, type="integer"),
-                 make_option("--col", default=24000, type="integer"),
+opt_list <- list(make_option("--row", default=89800, type="integer"),
+                 make_option("--col", default=24400, type="integer"),
                  make_option("--width_in_pixels", default=500, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
@@ -26,6 +26,8 @@ window <- getValuesBlock(mapbiomas,
                          nrows=opt$width_in_pixels,
                          ncols=opt$width_in_pixels)
 
+dim(window)
+window_extent <- extent(mapbiomas, opt$row, opt$row + opt$width_in_pixels, opt$col, opt$col + opt$width_in_pixels)
 
 window_raster<- raster(window_extent, crs=crs(mapbiomas), nrows=opt$width_in_pixels, ncols=opt$width_in_pixels)
 for(time_index in c(1, 8)) {
@@ -166,8 +168,9 @@ estimates$class_frequencies_before_combining <- class_frequencies_before_combini
 estimates$options <- opt
 estimates$window_bbox <- as.data.frame(bbox(window_extent))
 
-filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes.rds",
-                    opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample)
+filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes_%s.rds",
+                    opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample,
+                    ifelse(opt$grassland_as_forest,'grassland_as_forest','')))
 saveRDS(estimates, file=filename)
 
 for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
@@ -190,7 +193,7 @@ for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
           scale_color_discrete("algorithm") +
           ylab("probability") +
           theme_bw())
-    filename <- sprintf("transition_matrix_diagonals_window_%s_%s_width_%s_class_%s_with_combined_classes.png",
-                        opt$row, opt$col, opt$width_in_pixels, class)
+    filename <- sprintf("transition_matrix_diagonals_window_%s_%s_width_%s_class_%s_with_combined_classes_%s.png",
+                        opt$row, opt$col, opt$width_in_pixels, class,  ifelse(opt$grassland_as_forest,'grassland_as_forest',''))
     ggsave(p, filename=filename, width=6, height=4, units="in")
 }
