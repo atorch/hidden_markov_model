@@ -1,6 +1,6 @@
 library(ggplot2)
 
-estimate_filenames <- list.files(pattern="estimates_window_[0-9]*_[0-9]*_width_500_class_frequency_cutoff_0.005_subsample_0.1_combined_classes.rds")
+estimate_filenames <- list.files(pattern="estimates_window_[0-9]*_[0-9]*_width_500_class_frequency_cutoff_0.005_subsample_0.1_combined_classes_grassland_as_forest.rds")
 
 forest_class <- 3
 

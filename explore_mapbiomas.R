@@ -170,7 +170,7 @@ estimates$window_bbox <- as.data.frame(bbox(window_extent))
 
 filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes_%s.rds",
                     opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample,
-                    ifelse(opt$grassland_as_forest,'grassland_as_forest','')))
+                    ifelse(opt$grassland_as_forest,'grassland_as_forest',''))
 saveRDS(estimates, file=filename)
 
 for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
