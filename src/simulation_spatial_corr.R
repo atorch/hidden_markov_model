@@ -109,7 +109,7 @@ run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_pe
                     pixel_j=pixel_j))
     })
 
-    estimates <- get_hmm_and_minimum_distance_estimates_random_initialization(params=params0, panel=pixel_panel)
+    estimates <- get_em_and_min_dist_estimates_random_initialization(params=params0, panel=pixel_panel)
 
     return(list(pixel_panel=pixel_panel,
                 estimates=estimates,
@@ -165,7 +165,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                 clusterExport(cluster, c("baum_welch",
                                          "eq_function_minimum_distance",
                                          "get_expectation_maximization_estimates",
-                                         "get_hmm_and_minimum_distance_estimates_random_initialization",
+                                         "get_em_and_min_dist_estimates_random_initialization",
                                          "get_min_distance_estimates",
                                          "get_random_initial_parameters",
                                          "get_transition_probs_from_M_S_joint",

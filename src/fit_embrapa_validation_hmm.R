@@ -195,7 +195,7 @@ params0 <- initial_hmm_params[[1]]
 params0$P_list <- rep(list(params0$P), length(unique((dtable$year))) - 1)
 params0$P <- NULL
 
-estimates_time_varying <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, panel)
+estimates_time_varying <- get_em_and_min_dist_estimates_random_initialization(params0, panel)
 
 ## Estimated crops->pasture transition probability hits edge (it's zero) in one period, but seems reasonable
 estimates_time_varying$min_dist_params_hat_best_objfn
@@ -252,7 +252,7 @@ run_bootstrap <- function() {
     params0$P_list <- rep(list(params0$P), length(unique((dtable$year))) - 1)
     params0$P <- NULL
 
-    estimates_time_varying <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, panel_boot)
+    estimates_time_varying <- get_em_and_min_dist_estimates_random_initialization(params0, panel_boot)
 
     hmm_params_hat_time_varying <- estimates_time_varying$em_params_hat_best_likelihood
     md_params_hat_time_varying <- estimates_time_varying$min_dist_params_hat_best_objfn
@@ -429,7 +429,7 @@ clusterExport(cluster, c("baum_welch",
                          "eq_function_minimum_distance",
                          "eq_function_min_dist_time_homogeneous",
                          "get_expectation_maximization_estimates",
-                         "get_hmm_and_minimum_distance_estimates_random_initialization",
+                         "get_em_and_min_dist_estimates_random_initialization",
                          "get_min_distance_estimates",
                          "get_min_distance_estimates_time_homogeneous",
                          "get_minimum_distance_estimates_random_initialization_time_homogeneous",

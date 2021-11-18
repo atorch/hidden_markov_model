@@ -8,10 +8,12 @@ get_reforestation_prob_from_P <- function(P) {
     return(P[2, 1])
 }
 
-get_random_initial_parameters <- function(params0) {
+get_random_initial_parameters <- function(params0, diag_min, diag_max) {
 
     ## TODO Does this function really need params0 as an arg?  Or only params0$n_components and n_time_periods?
     ## Given a true set of HMM parameters, return random incorrect parameters from which to begin parameter estimation
+
+    stopifnot(0.5 < diag_min && diag_min < diag_max && diag_max <= 1)
 
     initial_parameters <- list(n_components=params0$n_components)
 
@@ -21,7 +23,7 @@ get_random_initial_parameters <- function(params0) {
             ## Probabilities on diagonals of the transition probability matrices
             ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
             ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$P_list?
-            random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
+            random_uniform <- runif(params0$n_components, min=diag_min, max=diag_max)
 
             P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
             diag(P) <- random_uniform
@@ -29,7 +31,7 @@ get_random_initial_parameters <- function(params0) {
             return(P)
         })
     } else {
-        random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
+        random_uniform <- runif(params0$n_components, min=diag_min, max=diag_max)
 
         P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$P), ncol=ncol(params0$P))
         diag(P) <- random_uniform
@@ -37,7 +39,7 @@ get_random_initial_parameters <- function(params0) {
     }
 
     ## Probabilities on the diagonals of the observation probability matrix pr_y
-    random_uniform <- runif(params0$n_components, min=0.6, max=0.98)
+    random_uniform <- runif(params0$n_components, min=diag_min, max=diag_max)
     initial_parameters$pr_y <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$pr_y), ncol=ncol(params0$pr_y))
     diag(initial_parameters$pr_y) <- random_uniform
 
@@ -52,6 +54,9 @@ is_diag_dominant <- function(pr_y) {
 }
 
 get_min_distance_estimates_time_homogeneous <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
+
+    message("Starting min dist estimation, initial values for diagonals of Pr[ Y | S ] matrix are:")
+    print(diag(initial_params$pr_y))
 
     M_S_joint_initial <- t(initial_params$P * matrix(initial_params$mu, initial_params$n_components, initial_params$n_components))
 
@@ -96,6 +101,9 @@ get_min_distance_estimates_time_homogeneous <- function(initial_params, M_Y_join
 }
 
 get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
+
+    message("Starting min dist estimation, initial values for diagonals of Pr[ Y | S ] matrix are: ")
+    print(diag(initial_params$pr_y))
 
     M_S_joint_list_initial <- lapply(seq_along(initial_params$P_list), function(time_index) {
         ## Joint distribution of S_t, S_{t+1} implied by initial params
@@ -153,7 +161,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
 }
 
-get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, panel, n_random_starts=10) {
+get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, n_random_starts=10, diag_min=0.6, diag_max=0.98) {
 
     ## Params0 are true HMM parameters used to generate data
 
@@ -173,7 +181,6 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
     dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
 
-    ## TODO How does this behave when Y is MCAR?
     ## Joint distribution of (Y_{t+1}, Y_{t})
     M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
         with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
@@ -199,7 +206,9 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
         })
     })
 
-    random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
+    random_initial_parameters <- replicate(n=n_random_starts,
+                                           get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
+                                           simplify=FALSE)
 
     min_dist_params_hat <- lapply(random_initial_parameters,
                                   get_min_distance_estimates,
@@ -240,12 +249,14 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
                 "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant))
 }
 
-get_minimum_distance_estimates_random_initialization_time_homogeneous <- function(params0, panel, n_random_starts=10) {
+get_minimum_distance_estimates_random_initialization_time_homogeneous <- function(params0, panel, n_random_starts=10, diag_min=0.6, diag_max=0.98) {
 
     require(data.table)
     require(Rsolnp)
 
-    random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
+    random_initial_parameters <- replicate(n=n_random_starts,
+                                           get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
+                                           simplify=FALSE)
 
     for(idx in seq_along(panel)) {
         panel[[idx]]$point_id <- idx
@@ -558,7 +569,10 @@ get_expectation_maximization_estimates <- function(panel, params, max_iter, epsi
     ## EM for panel of independent HMM realizations; stop at max_iter or distance < epsilon
     ## Written following Ramon van Handel's HMM notes page 87, algorithm 6.1, modified for panel data
     ## https://www.princeton.edu/~rvan/orf557/hmm080728.pdf
-    message("starting em ", Sys.time())
+
+    message("starting em, time is ", Sys.time(), ", initial values for diagonals of Pr[ Y | S ] matrix are: ")
+    print(diag(params$pr_y))
+
     stopifnot(valid_parameters(params))
     observation_lengths <- vapply(panel, function(panel_element) {
         length(panel_element$y)
@@ -581,7 +595,7 @@ get_expectation_maximization_estimates <- function(panel, params, max_iter, epsi
             denominator <- Reduce("+", denominators)
             stopifnot(all(rowSums(denominator) > 0))  # Can fail if a state has zero probability
             stopifnot(all(denominator > 0))
-                P <- numerator / denominator
+            P <- numerator / denominator
             stopifnot(isTRUE(all.equal(rowSums(P), rep(1, params$n_components))))
             return(P)
         })
@@ -687,7 +701,7 @@ get_expectation_maximization_estimates <- function(panel, params, max_iter, epsi
         rm(baum_welch_list)
         gc()
     }
-    message("done running em ", Sys.time())
+    message("done running em, time is ", Sys.time())
     params$time_finished_em <- Sys.time()
     return(params)
 }
