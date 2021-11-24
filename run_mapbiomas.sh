@@ -1,15 +1,13 @@
 #!/bin/bash
 
-echo "Starting first group with grassland as forest"
-for colVal in {23000..27000..500}
+for rowVal in {89000..91000..500}
 do
-    Rscript explore_mapbiomas.R --row 90000 --col $colVal --grassland_as_forest --subsample 0.05 &
+    for colVal in {20000..25500..500}
+    do
+	logFile=log_${rowVal}_${colVal}.txt
+	echo "Running row $rowVal col $colVal, writing logs to $logFile"
+	Rscript explore_mapbiomas.R --row $rowVal --col $colVal --grassland_as_forest --combine_other_non_forest --subsample 0.04 &> $logFile &
+    done
+    echo "Sleeping before running next group of jobs"
+    sleep 3600
 done
-wait
-
-echo "Starting first group with separate grassland"
-for colVal in {23000..27000..500}
-do
-    Rscript explore_mapbiomas.R --row 90000 --col $colVal --subsample 0.05 &
-done
-wait

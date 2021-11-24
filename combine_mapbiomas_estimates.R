@@ -1,6 +1,6 @@
 library(ggplot2)
 
-estimate_filenames <- list.files(pattern="estimates_window_[0-9]*_[0-9]*_width_500_class_frequency_cutoff_0.005_subsample_0.1_combined_classes_grassland_as_forest.rds")
+estimate_filenames <- list.files(pattern="estimates_window_[0-9]*_[0-9]*_width_500_class_frequency_cutoff_0.005_subsample_0.04_combined_classes_grassland_as_forest_combine_other_non_forest.rds")
 
 forest_class <- 3
 
@@ -32,6 +32,8 @@ for(filename in estimate_filenames) {
 }
 
 df <- do.call(rbind, estimate_dfs)
+message("Fraction of windows with diag dominant Pr[ Y | S ] for EM/ML:")
+print(mean(df$pr_y_diag_dominant_ml))
 filename <- sprintf("estimated_deforestation_rates_%s.csv", format(Sys.time(), "%Y_%m_%d"))
 message("Writing ", filename, ", dataframe dim is ", nrow(df), " by ", ncol(df))
 write.csv(df, filename, row.names=FALSE)

@@ -12,8 +12,9 @@ opt_list <- list(make_option("--row", default=89800, type="integer"),
                  make_option("--width_in_pixels", default=500, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
-                 make_option("--n_random_starts", default=3, type="integer"),
-                 make_option("--grassland_as_forest", default=FALSE, action="store_true"))
+                 make_option("--n_random_starts", default=2, type="integer"),
+                 make_option("--grassland_as_forest", default=FALSE, action="store_true"),
+                 make_option("--combine_other_non_forest", default=FALSE, action="store_true"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
@@ -61,15 +62,9 @@ for(time_index in seq_len(n_years)) {
     }
 }
 
-## Examine class 33 (rivers, lakes, ocean)
-## In how many years are pixels classified as class 33?
-table(rowSums(window == 33, na.rm=TRUE))
-## Examine a pixel that switches between class 33 and other classes
-window[which(!rowSums(window == 33, na.rm=TRUE) %in% c(0, ncol(window)))[1], ]
-
 ## Combine classes
 ## Class 12 (grassland) is optionally combined with class 3 (forest)
-if (opt$grassland_as_forest) window[window %in% 12] <- 21
+if (opt$grassland_as_forest) window[window %in% 12] <- 3
 
 ## Combine classes
 ## Class 9 (forest plantation) is combined with class 3 (forest)
@@ -78,6 +73,10 @@ window[window == 9] <- 3
 ## Combine classes
 ## Class 11 (wetlands) and class 22 (sand) are combined with class 33 (rivers and lakes)
 window[window %in% c(11, 22)] <- 33
+
+## Combine classes
+## Class 13 (other non-forest) is combined with class 33 (already a combination of wetlands, sand, rivers and lakes)
+if(opt$combine_other_non_forest) window[window %in% 13] <- 33
 
 ## See https://mapbiomas-br-site.s3.amazonaws.com/downloads/Colecction%206/Cod_Class_legenda_Col6_MapBiomas_BR.pdf
 unique_mapbiomas_classes <- sort(unique(c(window, recursive=TRUE)))
@@ -151,8 +150,8 @@ dummy_params <- list(mu=rep(1/n_states, n_states),
 estimates <- get_em_and_min_dist_estimates_random_initialization(params=dummy_params,
                                                                  panel=panel,
                                                                  n_random_starts=opt$n_random_starts,
-                                                                 diag_min=0.7,
-                                                                 diag_max=0.9)
+                                                                 diag_min=0.8,
+                                                                 diag_max=0.95)
 
 estimates$P_hat_frequency <- lapply(estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
 
@@ -164,9 +163,11 @@ estimates$class_frequencies_before_combining <- class_frequencies_before_combini
 estimates$options <- opt
 estimates$window_bbox <- as.data.frame(bbox(window_extent))
 
-filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes_%s.rds",
+filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s.rds",
                     opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample,
-                    ifelse(opt$grassland_as_forest, "grassland_as_forest", ""))
+                    ifelse(opt$grassland_as_forest, "_grassland_as_forest", ""),
+                    ifelse(opt$combine_other_non_forest, "_combine_other_non_forest", ""))
+message("Saving ", filename)
 saveRDS(estimates, file=filename)
 
 for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
