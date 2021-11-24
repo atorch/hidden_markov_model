@@ -50,7 +50,6 @@ if(pr_missing > 0.9 || pr_water_or_sand > 0.5) {
     quit()
 }
 
-
 n_years <- ncol(window)
 for(time_index in seq_len(n_years)) {
     pr_missing <- mean(is.na(window[, time_index]))
@@ -61,6 +60,14 @@ for(time_index in seq_len(n_years)) {
         quit()
     }
 }
+
+fraction_missing_in_all_years <- mean(rowMeans(is.na(window)) == 1.0)
+count_missing_in_all_years <- sum(rowMeans(is.na(window)) == 1.0)
+message("Fraction of pixels missing in 100% of years in the original data: ", fraction_missing_in_all_years)
+
+## When constructing our panel (for estimation), we will only consider pixels that contain at least one non-missing observation
+## in the original data. This will remove pixels in the ocean and pixels outside of the Atlantic forest region
+valid_pixel_index <- rowMeans(is.na(window)) < 1.0
 
 ## Combine classes
 ## Class 12 (grassland) is optionally combined with class 3 (forest)
@@ -130,16 +137,22 @@ mean(rowMeans(is.na(window_recoded)) > 0)
 message("Fraction of pixels missing in >50% of years in the recoded data:")
 mean(rowMeans(is.na(window_recoded)) > .5)
 message("Fraction of pixels missing in 100% of years in the recoded data:")
-mean(rowMeans(is.na(window_recoded)) == 1.0)  # TODO Remove these pixels (but first, count how many of them there are)
+mean(rowMeans(is.na(window_recoded)) == 1.0)
 
 full_panel <- apply(window_recoded, 1, function(y) list(y=as.vector(y), time=seq_along(y)))
 
-panel <- sample(full_panel, size=length(full_panel) * opt$subsample, replace=FALSE)
+## Using prob=valid_pixel_index excludes pixels that have 100% missing observations in the original data
+panel <- sample(full_panel, size=length(full_panel) * opt$subsample, replace=FALSE, prob=valid_pixel_index)
+
+## We no longer need the full window at this point, rm it to save memory
+rm(window)
+rm(full_panel)
+gc()
 
 ## These aren't actually used in optimization,
 ## they're just used to create other parameters of the same shape/dimension/time horizon
 n_states <- length(mapbiomas_classes_to_keep)
-n_time_periods <- ncol(window)
+n_time_periods <- ncol(window_recoded)
 dummy_pr_transition <- 0.2 * matrix(1/n_states, nrow=n_states, ncol=n_states) + 0.8 * diag(n_states)
 dummy_pr_y <- 0.2 * matrix(1/n_states, n_states, n_states) + 0.8 * diag(n_states)
 dummy_params <- list(mu=rep(1/n_states, n_states),
@@ -162,6 +175,9 @@ estimates$class_frequencies_before_combining <- class_frequencies_before_combini
 
 estimates$options <- opt
 estimates$window_bbox <- as.data.frame(bbox(window_extent))
+
+estimates$fraction_missing_in_all_years <- fraction_missing_in_all_years
+estimates$count_missing_in_all_years <- count_missing_in_all_years
 
 filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s.rds",
                     opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample,

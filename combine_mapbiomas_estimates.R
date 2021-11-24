@@ -4,6 +4,8 @@ estimate_filenames <- list.files(pattern="estimates_window_[0-9]*_[0-9]*_width_5
 
 forest_class <- 3
 
+message("Found ", length(estimate_filenames), " .rds files matching pattern")
+
 estimate_dfs <- list()
 for(filename in estimate_filenames) {
     message("Loading ", filename)
