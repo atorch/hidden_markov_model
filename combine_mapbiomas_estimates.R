@@ -34,24 +34,59 @@ for(filename in estimate_filenames) {
 }
 
 df <- do.call(rbind, estimate_dfs)
+
 message("Fraction of windows with diag dominant Pr[ Y | S ] for EM/ML:")
 print(mean(df$pr_y_diag_dominant_ml))
+
+message("Fraction of windows with diag dominant Pr[ Y | S ] for MD:")
+print(mean(df$pr_y_diag_dominant_md))
+
+message("Fraction of windows with diag dominant Pr[ Y | S ] for MD or EM/ML:")
+print(mean(df$pr_y_diag_dominant_md | df$pr_y_diag_dominant_ml))
+
 filename <- sprintf("estimated_deforestation_rates_%s.csv", format(Sys.time(), "%Y_%m_%d"))
 message("Writing ", filename, ", dataframe dim is ", nrow(df), " by ", ncol(df))
 write.csv(df, filename, row.names=FALSE)
 
+title <- sprintf("Correlation = %s", round(cor(df$deforestation_rate_ml, df$deforestation_rate_md), 3))
+p <- (ggplot(df, aes(x=deforestation_rate_ml, y=deforestation_rate_md)) +      
+      geom_point(alpha=0.15) +
+      geom_smooth(method="lm", formula=y ~ x) +
+      geom_abline(slope=1, lty=2, alpha=0.5) +      
+      ggtitle(title) +
+      theme_bw() +
+      theme(plot.title = element_text(hjust = 0.5)))
+filename <- "estimated_deforestation_rates_md_versus_ml.png"
+ggsave(p, filename=filename, width=6, height=4, units="in")
+
 p <- (ggplot(df, aes(x=deforestation_rate_freq, y=deforestation_rate_ml)) +
       geom_abline(slope=1, lty=2, alpha=0.5) +
-      geom_point(alpha=0.5) +
+      geom_point(alpha=0.15) +
       theme_bw())
-filename <- "estimated_deforestation_rates.png"
+filename <- "estimated_deforestation_rates_ml.png"
 ggsave(p, filename=filename, width=6, height=4, units="in")
 
 p <- (ggplot(subset(df, pr_y_diag_dominant_ml), aes(x=deforestation_rate_freq, y=deforestation_rate_ml)) +
       geom_abline(slope=1, lty=2, alpha=0.5) +
-      geom_point(alpha=0.25) +
+      geom_point(alpha=0.15) +
       ggtitle("Windows where estimated Pr[ Y | S ] is diag dominant") +
       theme_bw() +
       theme(plot.title = element_text(hjust = 0.5)))
-filename <- "estimated_deforestation_rates_diag_dominant.png"
+filename <- "estimated_deforestation_rates_ml_diag_dominant.png"
+ggsave(p, filename=filename, width=6, height=4, units="in")
+
+p <- (ggplot(df, aes(x=deforestation_rate_freq, y=deforestation_rate_md)) +
+      geom_abline(slope=1, lty=2, alpha=0.5) +
+      geom_point(alpha=0.15) +
+      theme_bw())
+filename <- "estimated_deforestation_rates_md.png"
+ggsave(p, filename=filename, width=6, height=4, units="in")
+
+p <- (ggplot(subset(df, pr_y_diag_dominant_md), aes(x=deforestation_rate_freq, y=deforestation_rate_md)) +
+      geom_abline(slope=1, lty=2, alpha=0.5) +
+      geom_point(alpha=0.15) +
+      ggtitle("Windows where estimated Pr[ Y | S ] is diag dominant") +
+      theme_bw() +
+      theme(plot.title = element_text(hjust = 0.5)))
+filename <- "estimated_deforestation_rates_md_diag_dominant.png"
 ggsave(p, filename=filename, width=6, height=4, units="in")
