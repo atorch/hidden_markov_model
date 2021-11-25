@@ -14,7 +14,8 @@ opt_list <- list(make_option("--row", default=89800, type="integer"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
                  make_option("--n_random_starts", default=2, type="integer"),
                  make_option("--grassland_as_forest", default=FALSE, action="store_true"),
-                 make_option("--combine_other_non_forest", default=FALSE, action="store_true"))
+                 make_option("--combine_other_non_forest", default=FALSE, action="store_true"),
+                 make_option("--skip_ml_if_md_is_diag_dominant", default=FALSE, action="store_true"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
@@ -164,7 +165,8 @@ estimates <- get_em_and_min_dist_estimates_random_initialization(params=dummy_pa
                                                                  panel=panel,
                                                                  n_random_starts=opt$n_random_starts,
                                                                  diag_min=0.8,
-                                                                 diag_max=0.95)
+                                                                 diag_max=0.95,
+                                                                 skip_ml_if_md_is_diag_dominant=opt$skip_ml_if_md_is_diag_dominant)
 
 estimates$P_hat_frequency <- lapply(estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
 
@@ -179,10 +181,11 @@ estimates$window_bbox <- as.data.frame(bbox(window_extent))
 estimates$fraction_missing_in_all_years <- fraction_missing_in_all_years
 estimates$count_missing_in_all_years <- count_missing_in_all_years
 
-filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s.rds",
+filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s%s.rds",
                     opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample,
                     ifelse(opt$grassland_as_forest, "_grassland_as_forest", ""),
-                    ifelse(opt$combine_other_non_forest, "_combine_other_non_forest", ""))
+                    ifelse(opt$combine_other_non_forest, "_combine_other_non_forest", ""),
+                    ifelse(opt$skip_ml_if_md_is_diag_dominant, "_skip_ml_if_md_is_diag_dominant", ""))
 message("Saving ", filename)
 saveRDS(estimates, file=filename)
 
@@ -192,7 +195,12 @@ for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
     ## Diagonals of the transition matrix (for example, Pr[ forest at t+1 | forest at t ])
     P_hat_frequency <- sapply(estimates$P_hat_frequency, function(P) P[class_index, class_index])
     P_hat_md <- sapply(estimates$min_dist_params_hat_best_objfn$P_list, function(P) P[class_index, class_index])
-    P_hat_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list, function(P) P[class_index, class_index])
+
+    if("em_params_hat_best_likelihood" %in% names(estimates)) {
+        P_hat_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list, function(P) P[class_index, class_index])
+    } else {
+        P_hat_ml <- rep(NA, length(P_hat_md))
+    }
 
     df <- data.table(time_index=seq_along(P_hat_frequency), P_hat_frequency=P_hat_frequency, P_hat_md, P_hat_ml)
     df_melted <- melt(df, id.vars="time_index")
@@ -207,6 +215,6 @@ for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
           ylab("probability") +
           theme_bw())
     filename <- sprintf("transition_matrix_diagonals_window_%s_%s_width_%s_class_%s_with_combined_classes_%s.png",
-                        opt$row, opt$col, opt$width_in_pixels, class,  ifelse(opt$grassland_as_forest,'grassland_as_forest',''))
+                        opt$row, opt$col, opt$width_in_pixels, class, ifelse(opt$grassland_as_forest, "grassland_as_forest", ""))
     ggsave(p, filename=filename, width=6, height=4, units="in")
 }

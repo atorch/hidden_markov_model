@@ -44,6 +44,11 @@ print(mean(df$pr_y_diag_dominant_md))
 message("Fraction of windows with diag dominant Pr[ Y | S ] for MD or EM/ML:")
 print(mean(df$pr_y_diag_dominant_md | df$pr_y_diag_dominant_ml))
 
+message("Summary stats for EM/ML deforestation rates:")
+print(summary(df$deforestation_rate_ml))
+message("Summary stats for MD deforestation rates:")
+print(summary(df$deforestation_rate_md))
+
 filename <- sprintf("estimated_deforestation_rates_%s.csv", format(Sys.time(), "%Y_%m_%d"))
 message("Writing ", filename, ", dataframe dim is ", nrow(df), " by ", ncol(df))
 write.csv(df, filename, row.names=FALSE)

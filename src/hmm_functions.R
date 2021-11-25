@@ -161,7 +161,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
 }
 
-get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, n_random_starts=10, diag_min=0.6, diag_max=0.98) {
+get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, n_random_starts=10, diag_min=0.6, diag_max=0.98, skip_ml_if_md_is_diag_dominant=FALSE) {
 
     ## Params0 are true HMM parameters used to generate data
 
@@ -226,6 +226,21 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
     min_dist_pr_y_is_diag_dominant <- sapply(min_dist_params_hat, function(x) {
         return(is_diag_dominant(x$pr_y))
     })
+
+    if(skip_ml_if_md_is_diag_dominant) {
+        if(all(diag(min_dist_params_hat_best_objfn$pr_y) > 0.51)) {
+            message("MD Pr[ Y | S ] is diag dominant, skipping EM/ML")
+            return(list("panel_size"=length(panel),
+                        "M_Y_joint_hat"=M_Y_joint_hat_list,
+                        "initial_parameters_list"=random_initial_parameters,
+                        "min_dist_params_hat"=min_dist_params_hat,
+                        "min_dist_objfn_values"=min_dist_objfn_values,
+                        "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
+                        "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant))
+        } else {
+            message("MD Pr[ Y | S ] is not diag dominant, will run EM/ML")
+        }
+    }
 
     ## TODO How often are we hitting max_iter?  Make it a parameter
     em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
