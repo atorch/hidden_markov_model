@@ -1,13 +1,5 @@
 #!/bin/bash
 
-for rowVal in {80000..91000..500}
-do
-    for colVal in {16000..26500..500}
-    do
-	logFile=log_${rowVal}_${colVal}.txt
-	echo "Running row $rowVal col $colVal, writing logs to $logFile"
-	Rscript explore_mapbiomas.R --row $rowVal --col $colVal --grassland_as_forest --combine_other_non_forest --subsample 0.04 --skip_ml_if_md_is_diag_dominant &> $logFile &
-    done
-    echo "Sleeping before running next group of jobs"
-    sleep 1200
-done
+
+parallel --jobs 8  "Rscript explore_mapbiomas.R --row {1} --col {2} --grassland_as_forest --combine_other_non_forest --subsample 0.04 --skip_ml_if_md_is_diag_dominant > log_{1}_{2}.txt" ::: {70000..80000..500} ::: {1000..8000..500} 
+
