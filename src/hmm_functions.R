@@ -161,7 +161,7 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
 
 }
 
-get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, n_random_starts=10, diag_min=0.6, diag_max=0.98, skip_ml_if_md_is_diag_dominant=FALSE) {
+get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, n_random_starts_em=10,n_random_starts_md = 1,  diag_min=0.6, diag_max=0.98, skip_ml_if_md_is_diag_dominant=FALSE) {
 
     ## Params0 are true HMM parameters used to generate data
 
@@ -206,11 +206,18 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
         })
     })
 
-    random_initial_parameters <- replicate(n=n_random_starts,
+    random_initial_parameters_em <- replicate(n=n_random_starts_em,
                                            get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
                                            simplify=FALSE)
 
-    min_dist_params_hat <- lapply(random_initial_parameters,
+    random_initial_parameters_md <- replicate(n=n_random_starts_md,
+                                              get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
+                                              simplify=FALSE)
+
+    message('Random initial MD parameters')
+    print(random_initial_parameters_md)
+
+    min_dist_params_hat <- lapply(random_initial_parameters_md,
                                   get_min_distance_estimates,
                                   M_Y_joint_hat_list=M_Y_joint_hat_list,
                                   M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
@@ -232,7 +239,7 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
             message("MD Pr[ Y | S ] is diag dominant, skipping EM/ML")
             return(list("panel_size"=length(panel),
                         "M_Y_joint_hat"=M_Y_joint_hat_list,
-                        "initial_parameters_list"=random_initial_parameters,
+                        "initial_parameters_list"=random_initial_parameters_md,
                         "min_dist_params_hat"=min_dist_params_hat,
                         "min_dist_objfn_values"=min_dist_objfn_values,
                         "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
@@ -243,7 +250,7 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
     }
 
     ## TODO How often are we hitting max_iter?  Make it a parameter
-    em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
+    em_params_hat_list <- lapply(random_initial_parameters_em, function(initial_params) {
         return(get_expectation_maximization_estimates(panel, initial_params, max_iter=40, epsilon=0.001))
     })
     em_likelihoods <- sapply(em_params_hat_list, function(x) {
@@ -256,7 +263,7 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
                 "M_Y_joint_hat"=M_Y_joint_hat_list,
                 "em_params_hat_list"=em_params_hat_list,
                 "em_params_hat_loglikelihoods"=em_likelihoods,
-                "initial_parameters_list"=random_initial_parameters,
+                "initial_parameters_list"=random_initial_parameters_em,
                 "em_params_hat_best_likelihood"=em_params_hat_best_likelihood,
                 "min_dist_params_hat"=min_dist_params_hat,
                 "min_dist_objfn_values"=min_dist_objfn_values,
