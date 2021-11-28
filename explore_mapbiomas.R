@@ -9,7 +9,7 @@ mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 
 opt_list <- list(make_option("--row", default=89800, type="integer"),
                  make_option("--col", default=24400, type="integer"),
-                 make_option("--width_in_pixels", default=500, type="integer"),
+                 make_option("--width_in_pixels", default=1000, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
                  make_option("--n_random_starts_em", default=2, type="integer"),

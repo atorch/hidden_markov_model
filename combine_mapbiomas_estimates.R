@@ -1,6 +1,6 @@
 library(ggplot2)
 
-estimate_filenames <- list.files(pattern="estimates_window_[0-9]*_[0-9]*_width_500_class_frequency_cutoff_0.005_subsample_0.04_combined_classes_grassland_as_forest_combine_other_non_forest.rds")
+estimate_filenames <- list.files(pattern="estimates_window_[0-9]*_[0-9]*_width_1000_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_skip_ml_if_md_is_diag_dominant.rds")
 
 forest_class <- 3
 
@@ -12,8 +12,13 @@ for(filename in estimate_filenames) {
     estimates <- readRDS(filename)
     if(forest_class %in% estimates$mapbiomas_classes_to_keep) {
         forest_index <- which(estimates$mapbiomas_classes_to_keep == forest_class)
-        pr_remain_forest_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list, function(P) P[forest_index, forest_index])
         pr_remain_forest_md <- sapply(estimates$min_dist_params_hat_best_objfn$P_list, function(P) P[forest_index, forest_index])
+        if("em_params_hat_best_likelihood" %in% names(estimates)) {
+            pr_remain_forest_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list, function(P) P[forest_index, forest_index])
+        } else {
+            ## If using --skip_ml_if_md_is_diag_dominant, this will happen in windows where MD's pr_y is diagonally dominant
+            pr_remain_forest_ml <- rep(NA, length(pr_remain_forest_md))
+        }        
         pr_remain_forest_freq <- sapply(estimates$P_hat_frequency, function(P) P[forest_index, forest_index])
         df <- data.frame(deforestation_rate_ml=1 - pr_remain_forest_ml,
                          deforestation_rate_md=1 - pr_remain_forest_md,
