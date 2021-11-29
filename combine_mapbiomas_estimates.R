@@ -1,6 +1,6 @@
 library(ggplot2)
 
-estimate_filenames <- list.files(pattern="estimates_window_[0-9]*_[0-9]*_width_1000_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_skip_ml_if_md_is_diag_dominant.rds")
+estimate_filenames <- list.files(pattern="estimates_window_[0-9]*000_[0-9]*000_width_1000_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_skip_ml_if_md_is_diag_dominant.rds")
 
 forest_class <- 3
 
@@ -48,6 +48,9 @@ print(mean(df$pr_y_diag_dominant_md))
 
 message("Fraction of windows with diag dominant Pr[ Y | S ] for MD or EM/ML:")
 print(mean(df$pr_y_diag_dominant_md | df$pr_y_diag_dominant_ml))
+
+print(table(df$n_mapbiomas_classes))
+print(table(df$n_mapbiomas_classes, df$pr_y_diag_dominant_md))
 
 message("Summary stats for EM/ML deforestation rates:")
 print(summary(df$deforestation_rate_ml))

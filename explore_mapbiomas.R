@@ -7,8 +7,8 @@ library(raster)
 source("src/hmm_functions.R")
 mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 
-opt_list <- list(make_option("--row", default=89800, type="integer"),
-                 make_option("--col", default=24400, type="integer"),
+opt_list <- list(make_option("--row", default=50000, type="integer"),
+                 make_option("--col", default=51000, type="integer"),
                  make_option("--width_in_pixels", default=1000, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
@@ -73,15 +73,15 @@ valid_pixel_index <- rowMeans(is.na(window)) < 1.0
 
 ## Combine classes
 ## Class 12 (grassland) is optionally combined with class 3 (forest)
-if (opt$grassland_as_forest) window[window %in% 12] <- 3
+if(opt$grassland_as_forest) window[window %in% 12] <- 3
 
 ## Combine classes
-## Class 9 (forest plantation) is combined with class 3 (forest)
-window[window == 9] <- 3
+## Classes 4 (savanna formation) and 9 (forest plantation) are combined with class 3 (forest)
+window[window %in% c(4, 9)] <- 3
 
 ## Combine classes
-## Class 11 (wetlands) and class 22 (sand) are combined with class 33 (rivers and lakes)
-window[window %in% c(11, 22)] <- 33
+## Class 11 (wetlands), class 22 (sand), and class 29 (rocky outcrop) are combined with class 33 (rivers and lakes)
+window[window %in% c(11, 22, 29)] <- 33
 
 ## Combine classes
 ## Class 13 (other non-forest) is combined with class 33 (already a combination of wetlands, sand, rivers and lakes)
