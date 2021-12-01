@@ -1,6 +1,7 @@
 library(ggplot2)
 
-estimate_filenames <- list.files(pattern="estimates_window_[0-9]*000_[0-9]*000_width_1000_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_skip_ml_if_md_is_diag_dominant.rds")
+fileDir <- '/home/ted/Dropbox/amazon_hmm_shared/mapbiomas_estimates_rds_files/'
+estimate_filenames <- list.files(path = fileDir, pattern="estimates_window_[0-9]*00[01]_[0-9]*00[01]_width_1000_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_skip_ml_if_md_is_diag_dominant.rds",full.names=TRUE)
 
 forest_class <- 3
 
