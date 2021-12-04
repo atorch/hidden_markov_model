@@ -1,4 +1,6 @@
 library(ggplot2)
+library(rgdal)
+library(rgeos)
 library(sp)
 
 fileDir <- "."
@@ -6,6 +8,15 @@ pattern <- "estimates_window_[0-9]*00[01]_[0-9]*00[01]_width_1000_class_frequenc
 estimate_filenames <- list.files(path=fileDir,
                                  pattern=pattern,
                                  full.names=TRUE)
+
+crs_longlat <- CRS("+proj=longlat")
+
+brazil_states <- readOGR(dsn="./state_boundaries/", layer="BRUFE250GC_SIR")
+brazil_state_names <- brazil_states$NM_ESTADO
+brazil_state_polygons <- as(brazil_states, "SpatialPolygons")
+
+# TODO Use spTransform here?
+proj4string(brazil_state_polygons) <- crs_longlat
 
 forest_class <- 3
 
@@ -38,7 +49,13 @@ for(filename in estimate_filenames) {
         window_polygon <- as(raster::extent(window_bbox), "SpatialPolygons")
         window_centroid <- coordinates(window_polygon)
 
-        ## TODO We could use either window_{lat, lon} or window_polygon to intersect with states/municipalities
+        ## TODO Double check this
+        proj4string(window_polygon) <- crs_longlat
+
+        intersected_states <- brazil_state_names[over(window_polygon, brazil_state_polygons)]
+
+        df$states <- paste(intersected_states, collapse=",")
+
         df$window_lat <- window_centroid[2]
         df$window_lon <- window_centroid[1]
 
