@@ -15,8 +15,13 @@ brazil_states <- readOGR(dsn="./state_boundaries/", layer="BRUFE250GC_SIR")
 brazil_state_names <- brazil_states$NM_ESTADO
 brazil_state_polygons <- as(brazil_states, "SpatialPolygons")
 
-# TODO Use spTransform here?
+brazil_municipalities <- readOGR(dsn="./munic_boundaries/", layer="BRMUE250GC_SIR")
+brazil_municipality_names <- brazil_municipalities$NM_MUNICIP
+brazil_municipality_polygons <- as(brazil_municipalities, "SpatialPolygons")
+
+# TODO Use spTransform here?  These are originally "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs"
 proj4string(brazil_state_polygons) <- crs_longlat
+proj4string(brazil_municipality_polygons) <- crs_longlat
 
 forest_class <- 3
 
@@ -53,8 +58,10 @@ for(filename in estimate_filenames) {
         proj4string(window_polygon) <- crs_longlat
 
         intersected_states <- brazil_state_names[over(window_polygon, brazil_state_polygons)]
+        intersected_municipalities <- brazil_municipality_names[over(window_polygon, brazil_municipality_polygons)]
 
         df$states <- paste(intersected_states, collapse=",")
+        df$municipalities <- paste(intersected_municipalities, collapse=",")
 
         df$window_lat <- window_centroid[2]
         df$window_lon <- window_centroid[1]
