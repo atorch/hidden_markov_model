@@ -4,7 +4,7 @@ library(rgeos)
 library(sp)
 
 fileDir <- "."
-pattern <- "estimates_window_[0-9]*00[01]_[0-9]*00[01]_width_1000_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_skip_ml_if_md_is_diag_dominant.rds"
+pattern <- "estimates_window_[0-9]*00[01]_[0-9]*00[01]_width_1000_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_use_md_as_initial_values_for_em.rds"
 estimate_filenames <- list.files(path=fileDir,
                                  pattern=pattern,
                                  full.names=TRUE)
@@ -98,7 +98,7 @@ print(summary(df$deforestation_rate_md))
 df$window_id <- sprintf("%s_%s", df$window_row, df$window_col)
 df$year = df$time_index + 1984
 
-filename <- sprintf("estimated_deforestation_rates_%s.csv", format(Sys.time(), "%Y_%m_%d"))
+filename <- sprintf("estimated_deforestation_rates_%s_use_md_as_initial_values_for_em.csv", format(Sys.time(), "%Y_%m_%d"))
 message("Writing ", filename, ", dataframe dim is ", nrow(df), " by ", ncol(df))
 write.csv(df, filename, row.names=FALSE)
 

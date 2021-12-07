@@ -155,15 +155,14 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
                                 convergence=solnp_result$convergence,
                                 mu=colSums(M_S_joint_list_hat_solnp[[1]]),
                                 objfn_values=solnp_result$values,
-                                x_guess=x_guess)
+                                x_guess=x_guess,
+                                n_components=initial_params$n_components)
 
     return(min_dist_params_hat)
 
 }
 
-get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, n_random_starts_em=10,n_random_starts_md = 1,  diag_min=0.6, diag_max=0.98, skip_ml_if_md_is_diag_dominant=FALSE) {
-
-    ## Params0 are true HMM parameters used to generate data
+get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, n_random_starts_em=10, n_random_starts_md=1, diag_min=0.6, diag_max=0.98, skip_ml_if_md_is_diag_dominant=FALSE, use_md_as_initial_values_for_em=FALSE) {
 
     require(data.table)
     require(Rsolnp)
@@ -204,17 +203,13 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
                                                                !is.na(dtable$y_one_period_ahead) &
                                                                !is.na(dtable$y)))
         })
-    })
-
-    random_initial_parameters_em <- replicate(n=n_random_starts_em,
-                                           get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
-                                           simplify=FALSE)
+    })    
 
     random_initial_parameters_md <- replicate(n=n_random_starts_md,
                                               get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
                                               simplify=FALSE)
 
-    message('Random initial MD parameters')
+    message("Random initial MD parameters:")
     print(random_initial_parameters_md)
 
     min_dist_params_hat <- lapply(random_initial_parameters_md,
@@ -239,7 +234,7 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
             message("MD Pr[ Y | S ] is diag dominant, skipping EM/ML")
             return(list("panel_size"=length(panel),
                         "M_Y_joint_hat"=M_Y_joint_hat_list,
-                        "initial_parameters_list"=random_initial_parameters_md,
+                        "initial_parameters_md"=random_initial_parameters_md,
                         "min_dist_params_hat"=min_dist_params_hat,
                         "min_dist_objfn_values"=min_dist_objfn_values,
                         "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
@@ -249,8 +244,20 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
         }
     }
 
+    if(use_md_as_initial_values_for_em && all(diag(min_dist_params_hat_best_objfn$pr_y) > 0.51)) {
+        message("Using MD estimates as initial values for EM")
+        initial_parameters_em <- list(min_dist_params_hat_best_objfn)
+    } else {
+        ## If use_md_as_initial_values_for_em is false _or_ if MD is not diagonally dominant,
+        ## we start EM at random values
+        message("Using random initial values for EM")
+        initial_parameters_em <- replicate(n=n_random_starts_em,
+                                           get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
+                                           simplify=FALSE)
+    }    
+
     ## TODO How often are we hitting max_iter?  Make it a parameter
-    em_params_hat_list <- lapply(random_initial_parameters_em, function(initial_params) {
+    em_params_hat_list <- lapply(initial_parameters_em, function(initial_params) {
         return(get_expectation_maximization_estimates(panel, initial_params, max_iter=40, epsilon=0.001))
     })
     em_likelihoods <- sapply(em_params_hat_list, function(x) {
@@ -263,12 +270,15 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
                 "M_Y_joint_hat"=M_Y_joint_hat_list,
                 "em_params_hat_list"=em_params_hat_list,
                 "em_params_hat_loglikelihoods"=em_likelihoods,
-                "initial_parameters_list"=random_initial_parameters_em,
+                "initial_parameters_em"=initial_parameters_em,
+                "initial_parameters_md"=random_initial_parameters_md,
                 "em_params_hat_best_likelihood"=em_params_hat_best_likelihood,
                 "min_dist_params_hat"=min_dist_params_hat,
                 "min_dist_objfn_values"=min_dist_objfn_values,
                 "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
-                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant))
+                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant,
+                "skip_ml_if_md_is_diag_dominant"=skip_ml_if_md_is_diag_dominant,
+                "use_md_as_initial_values_for_em"=use_md_as_initial_values_for_em))
 }
 
 get_minimum_distance_estimates_random_initialization_time_homogeneous <- function(params0, panel, n_random_starts=10, diag_min=0.6, diag_max=0.98) {

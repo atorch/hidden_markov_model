@@ -16,7 +16,8 @@ opt_list <- list(make_option("--row", default=50000, type="integer"),
                  make_option("--n_random_starts_md", default=1, type="integer"),
                  make_option("--grassland_as_forest", default=FALSE, action="store_true"),
                  make_option("--combine_other_non_forest", default=FALSE, action="store_true"),
-                 make_option("--skip_ml_if_md_is_diag_dominant", default=FALSE, action="store_true"))
+                 make_option("--skip_ml_if_md_is_diag_dominant", default=FALSE, action="store_true"),
+                 make_option("--use_md_as_initial_values_for_em", default=FALSE, action="store_true"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
@@ -168,7 +169,8 @@ estimates <- get_em_and_min_dist_estimates_random_initialization(params=dummy_pa
                                                                  n_random_starts_md=opt$n_random_starts_md,
                                                                  diag_min=0.8,
                                                                  diag_max=0.95,
-                                                                 skip_ml_if_md_is_diag_dominant=opt$skip_ml_if_md_is_diag_dominant)
+                                                                 skip_ml_if_md_is_diag_dominant=opt$skip_ml_if_md_is_diag_dominant,
+                                                                 use_md_as_initial_values_for_em=opt$use_md_as_initial_values_for_em)
 
 estimates$P_hat_frequency <- lapply(estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
 
@@ -183,11 +185,12 @@ estimates$window_bbox <- as.data.frame(bbox(window_extent))
 estimates$fraction_missing_in_all_years <- fraction_missing_in_all_years
 estimates$count_missing_in_all_years <- count_missing_in_all_years
 
-filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s%s.rds",
+filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s%s%s.rds",
                     opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample,
                     ifelse(opt$grassland_as_forest, "_grassland_as_forest", ""),
                     ifelse(opt$combine_other_non_forest, "_combine_other_non_forest", ""),
-                    ifelse(opt$skip_ml_if_md_is_diag_dominant, "_skip_ml_if_md_is_diag_dominant", ""))
+                    ifelse(opt$skip_ml_if_md_is_diag_dominant, "_skip_ml_if_md_is_diag_dominant", ""),
+                    ifelse(opt$use_md_as_initial_values_for_em, "_use_md_as_initial_values_for_em", ""))
 message("Saving ", filename)
 saveRDS(estimates, file=filename)
 

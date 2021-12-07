@@ -1,5 +1,11 @@
 csv/*
 pickles/*
 plots/*
+*rds
+*tif
+*txt
 **/*rds
 **/*tif
+state_boundaries/*
+munic_boundaries/*
+HMM_MapBiomas_v2/*
