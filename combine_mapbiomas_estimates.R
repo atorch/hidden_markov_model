@@ -106,7 +106,7 @@ title <- sprintf("Correlation = %s", round(cor(df$deforestation_rate_ml, df$defo
 p <- (ggplot(df, aes(x=deforestation_rate_ml, y=deforestation_rate_md)) +      
       geom_point(alpha=0.15) +
       geom_smooth(method="lm", formula=y ~ x) +
-      geom_abline(slope=1, lty=2, alpha=0.5) +      
+      geom_abline(slope=1, lty=2, alpha=0.5) +
       ggtitle(title) +
       theme_bw() +
       theme(plot.title = element_text(hjust = 0.5)))
