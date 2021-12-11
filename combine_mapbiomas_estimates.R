@@ -50,6 +50,12 @@ for(filename in estimate_filenames) {
                          window_row=estimates$options$row,
                          window_col=estimates$options$col)
 
+        df$pr_y_diagonal_sum_ml <- sum(diag(estimates$em_params_hat_best_likelihood$pr_y))
+        df$pr_y_diagonal_sum_md <- sum(diag(estimates$min_dist_params_hat_best_objfn$pr_y))
+        
+        df$pr_y_diagonal_forest_ml <- estimates$em_params_hat_best_likelihood$pr_y[forest_index, forest_index]
+        df$pr_y_diagonal_forest_md <- estimates$min_dist_params_hat_best_objfn$pr_y[forest_index, forest_index]
+
         window_bbox <- bbox(t(array(estimates$window_bbox)))
         window_polygon <- as(raster::extent(window_bbox), "SpatialPolygons")
         window_centroid <- coordinates(window_polygon)

@@ -48,9 +48,13 @@ for(pr_y_diagonals in list(c(0.99, 0.99), c(0.95, 0.92), c(0.90, 0.85), c(0.85, 
 
 df <- do.call(rbind, dfs)
 
+colors <- c("#e41a1c",
+            "#377eb8",
+            "#4daf4a",
+            "#984ea3")
 p <- (ggplot(df, aes(x=true_deforestation_rate, y=expected_deforestation_rate_freq, color=label)) +
       geom_point() +
       theme_bw() +
-      scale_color_manual("", c()) +
+      scale_color_manual("", values=colors) +
       geom_abline(slope=1, lty=2, alpha=0.5))
 ggsave(p, filename="example_expected_deforestation_rate_freq_given_true_deforestation_rate.png", width=6, height=4, units="in")
