@@ -30,7 +30,7 @@ calculate_mu_t <- function(time_index, params) {
     if(time_index == 1) {
         mu_t <- params$mu  # Equals initial distribution when t=1
     } else {
-        mu_t <- params$mu %*% Reduce("%*%", params$P_list[seq_len(time_index- 1)])
+        mu_t <- params$mu %*% Reduce("%*%", params$P_list[seq_len(time_index - 1)])
     }
     stopifnot(isTRUE(all.equal(sum(mu_t), 1)))  # Valid probability distribution, careful comparing floats
     return(mu_t)
@@ -71,8 +71,22 @@ for(filename in estimate_filenames) {
         mu_t_ml <- lapply(df$time_index, calculate_mu_t, params=estimates$em_params_hat_best_likelihood)
         df$fraction_forest_ml <- sapply(mu_t_ml, function(mu) mu[forest_index])
 
+        df$reforestation_rate_ml <- sapply(df$time_index, function(t) {
+            weights <- mu_t_ml[[t]][-forest_index] / sum(mu_t_ml[[t]][-forest_index])
+            return(sum(weights * estimates$em_params_hat_best_likelihood$P_list[[t]][-forest_index, forest_index]))
+        })
+
+        ## Sanity check: fraction_forest_ml should be consistent with the deforestation and reforestation rates
+        stopifnot(isTRUE(all.equal(df$fraction_forest_ml[2],
+        (1 - df$fraction_forest_ml[1]) * df$reforestation_rate_ml[1] + df$fraction_forest_ml[1] * (1 - df$deforestation_rate_ml[1]))))
+
         mu_t_md <- lapply(df$time_index, calculate_mu_t, params=estimates$min_dist_params_hat_best_objfn)
         df$fraction_forest_md <- sapply(mu_t_md, function(mu) mu[forest_index])
+
+        df$reforestation_rate_md <- sapply(df$time_index, function(t) {
+            weights <- mu_t_md[[t]][-forest_index] / sum(mu_t_md[[t]][-forest_index])
+            return(sum(weights * estimates$em_params_hat_best_likelihood$P_list[[t]][-forest_index, forest_index]))
+        })
 
         ## Fraction of forest classifications _after_ combining classes, all years combined
         df$forest_frequency_all_years <- estimates$class_frequencies[names(estimates$class_frequencies) == forest_class]
