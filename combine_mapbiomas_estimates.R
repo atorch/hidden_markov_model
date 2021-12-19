@@ -24,6 +24,7 @@ proj4string(brazil_state_polygons) <- crs_longlat
 proj4string(brazil_municipality_polygons) <- crs_longlat
 
 forest_class <- 3
+agriculture_and_pasture_class <- 21
 
 ## Compute the marginal distribution over hidden states
 calculate_mu_t <- function(time_index, params) {
@@ -60,6 +61,8 @@ for(filename in estimate_filenames) {
                          window_row=estimates$options$row,
                          window_col=estimates$options$col)
 
+        df$hidden_state_mapbiomas_classes <- paste(estimates$mapbiomas_classes_to_keep, collapse=",")
+
         df$pr_y_diagonal_sum_ml <- sum(diag(estimates$em_params_hat_best_likelihood$pr_y))
         df$pr_y_diagonal_sum_md <- sum(diag(estimates$min_dist_params_hat_best_objfn$pr_y))
         
@@ -87,6 +90,25 @@ for(filename in estimate_filenames) {
             weights <- mu_t_md[[t]][-forest_index] / sum(mu_t_md[[t]][-forest_index])
             return(sum(weights * estimates$em_params_hat_best_likelihood$P_list[[t]][-forest_index, forest_index]))
         })
+
+        if(agriculture_and_pasture_class %in% estimates$mapbiomas_classes_to_keep) {
+            agriculture_and_pasture_index <- which(estimates$mapbiomas_classes_to_keep == agriculture_and_pasture_class)
+            df$pr_agriculture_and_pasture_to_forest_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list,
+                                                                 function(P) P[agriculture_and_pasture_index, forest_index])
+            df$pr_agriculture_and_pasture_to_forest_md <- sapply(estimates$min_dist_params_hat_best_objfn$P_list,
+                                                                 function(P) P[agriculture_and_pasture_index, forest_index])
+            df$pr_agriculture_and_pasture_to_forest_freq <- sapply(estimates$P_hat_frequency,
+                                                                   function(P) P[agriculture_and_pasture_index, forest_index])
+            df$fraction_agriculture_and_pasture_ml <- sapply(mu_t_ml, function(mu) mu[agriculture_and_pasture_index])
+            df$fraction_agriculture_and_pasture_md <- sapply(mu_t_md, function(mu) mu[agriculture_and_pasture_index])
+        } else {
+            ## These are undefined in windows without agriculture and pasture
+            df$pr_agriculture_and_pasture_to_forest_ml <- NA
+            df$pr_agriculture_and_pasture_to_forest_md <- NA
+            df$pr_agriculture_and_pasture_to_forest_freq <- NA
+            df$fraction_agriculture_and_pasture_ml <- NA
+            df$fraction_agriculture_and_pasture_md <- NA
+        }
 
         ## Fraction of forest classifications _after_ combining classes, all years combined
         df$forest_frequency_all_years <- estimates$class_frequencies[names(estimates$class_frequencies) == forest_class]
