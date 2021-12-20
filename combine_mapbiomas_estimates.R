@@ -88,9 +88,9 @@ for(filename in estimate_filenames) {
 
         df$reforestation_rate_md <- sapply(df$time_index, function(t) {
             weights <- mu_t_md[[t]][-forest_index] / sum(mu_t_md[[t]][-forest_index])
-            return(sum(weights * estimates$em_params_hat_best_likelihood$P_list[[t]][-forest_index, forest_index]))
+            return(sum(weights * estimates$min_dist_params_hat_best_objfn$P_list[[t]][-forest_index, forest_index]))
         })
-
+        # TODO Same thing for our water/river/other class
         if(agriculture_and_pasture_class %in% estimates$mapbiomas_classes_to_keep) {
             agriculture_and_pasture_index <- which(estimates$mapbiomas_classes_to_keep == agriculture_and_pasture_class)
             df$pr_agriculture_and_pasture_to_forest_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list,
