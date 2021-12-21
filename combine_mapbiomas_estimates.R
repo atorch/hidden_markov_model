@@ -71,6 +71,8 @@ for(filename in estimate_filenames) {
 
         df$fraction_missing_in_all_years <- estimates$fraction_missing_in_all_years
 
+        df$fraction_forest_freq <- sapply(estimates$M_Y_joint_hat, function(M) as.vector(colSums(M)[forest_index]))
+
         mu_t_ml <- lapply(df$time_index, calculate_mu_t, params=estimates$em_params_hat_best_likelihood)
         df$fraction_forest_ml <- sapply(mu_t_ml, function(mu) mu[forest_index])
 
