@@ -73,6 +73,20 @@ for(filename in estimate_filenames) {
 
         df$fraction_forest_freq <- sapply(estimates$M_Y_joint_hat, function(M) as.vector(colSums(M)[forest_index]))
 
+        df$reforestation_rate_freq <- sapply(df$time_index, function(t) {
+            mu_t_freq <- as.vector(colSums(estimates$M_Y_joint_hat[[t]]))
+            weights <- mu_t_freq[-forest_index] / sum(mu_t_freq[-forest_index])
+            return(sum(weights * estimates$P_hat_frequency[[t]][-forest_index, forest_index]))
+        })
+
+        ## Sanity check: fraction_forest_freq should be consistent with the deforestation and reforestation rates
+        ## It isn't exactly because of missing data
+        ## rowSums(estimates$M_Y_joint_hat[[1]]) can differ from colSums(estimates$M_Y_joint_hat[[2]])
+        ## (they should be identical if Y is never missing)
+        stopifnot(isTRUE(all.equal(as.vector(rowSums(estimates$M_Y_joint_hat[[1]]))[forest_index],
+        ((1 - df$fraction_forest_freq[1]) * df$reforestation_rate_freq[1] +
+         df$fraction_forest_freq[1] * (1 - df$deforestation_rate_freq[1])))))
+
         mu_t_ml <- lapply(df$time_index, calculate_mu_t, params=estimates$em_params_hat_best_likelihood)
         df$fraction_forest_ml <- sapply(mu_t_ml, function(mu) mu[forest_index])
 
@@ -82,8 +96,8 @@ for(filename in estimate_filenames) {
         })
 
         ## Sanity check: fraction_forest_ml should be consistent with the deforestation and reforestation rates
-        stopifnot(isTRUE(all.equal(df$fraction_forest_ml[2],
-        (1 - df$fraction_forest_ml[1]) * df$reforestation_rate_ml[1] + df$fraction_forest_ml[1] * (1 - df$deforestation_rate_ml[1]))))
+        stopifnot(isTRUE(all.equal(tail(df$fraction_forest_ml, nrow(df) - 1),
+        head((1 - df$fraction_forest_ml) * df$reforestation_rate_ml + df$fraction_forest_ml * (1 - df$deforestation_rate_ml), nrow(df) - 1))))
 
         mu_t_md <- lapply(df$time_index, calculate_mu_t, params=estimates$min_dist_params_hat_best_objfn)
         df$fraction_forest_md <- sapply(mu_t_md, function(mu) mu[forest_index])
@@ -92,7 +106,7 @@ for(filename in estimate_filenames) {
             weights <- mu_t_md[[t]][-forest_index] / sum(mu_t_md[[t]][-forest_index])
             return(sum(weights * estimates$min_dist_params_hat_best_objfn$P_list[[t]][-forest_index, forest_index]))
         })
-        # TODO Same thing for our water/river/other class
+
         if(agriculture_and_pasture_class %in% estimates$mapbiomas_classes_to_keep) {
             agriculture_and_pasture_index <- which(estimates$mapbiomas_classes_to_keep == agriculture_and_pasture_class)
             df$pr_agriculture_and_pasture_to_forest_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list,
