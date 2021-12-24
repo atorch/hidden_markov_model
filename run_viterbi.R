@@ -1,20 +1,40 @@
+#!/usr/bin/env Rscript
+
 rm(list =ls())
 library(parallel)
 library(raster)
 library(data.table)
 library(stringr)
+library(optparse)
 
 source("src/hmm_functions.R")
 hmmResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/mapbiomas_estimates_rds_files'
+carbonStockResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'
+
+opt_list <- list(make_option("--row", default=28001, type="integer"),
+                 make_option("--col", default=67001, type="integer"),
+                 make_option("--width_in_pixels", default=1000, type="integer"),
+                 make_option("--raster_year", default=2017, type ="integer"),
+                 make_option("--subsample", default=0.01, type="double"))
+
+opt <- parse_args(OptionParser(option_list=opt_list))
+message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
+
 yearsVec <- 1985:2020
-row <- 49001
-col <- 51001
-width_in_pixels <- 1000
-subsample_for_viterbi <- 0.01
+row <- opt$row
+col <- opt$col
+width_in_pixels <- opt$width_in_pixels
+subsample_for_viterbi <- opt$subsample
+rasterYear <- opt$raster_year
 
 ##Results file
 filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_use_md_as_initial_values_for_em.rds", row, col, width_in_pixels)
-estimates <- readRDS(file.path(hmmResultsPath,filename))
+fullFilePath <- file.path(hmmResultsPath,filename)
+if (!file.exists(fullFilePath)){
+    message('No Estimates for this Window -- exiting')
+    q('no')
+}
+estimates <- readRDS(fullFilePath)
 
 ##Import mapbiomas
 mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
@@ -22,10 +42,8 @@ mapbiomas <- stack(mapBioMassFile)
 
 
 ##Carbon Stock File (file is Carbon Stock in rasterYear)
-rasterYear <- 2017
-carbonFile <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_data/carbonStockRaster2017.tif'
+carbonFile <- paste0('/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_data/carbonStockRaster',rasterYear,'.tif')
 carbonRaster <- terra::rast(carbonFile)
-
 
 ## Stop analysis if pr_y is not diagnoally dominant
 if(any(diag(estimates$em_params_hat_best_likelihood$pr_y)<.5)) stop()
@@ -163,7 +181,6 @@ carbonStockDatNonForest[,carbonVal := terra::extract(carbonRaster, cbind(x=xCoor
 
 
 ##Get averages of carbon stock for forest and non-forest
-
 carbonStockDatNonForest[,list(avg = mean(carbonVal,na.rm=TRUE),
                               sd = sd(carbonVal,na.rm = TRUE)),
                         by = recodedLandUse.viterbiF]
@@ -171,7 +188,9 @@ carbonStockDatNonForest[,list(avg = mean(carbonVal,na.rm=TRUE),
 carbonStockDatForest[,list(avg = mean(carbonVal,na.rm=TRUE),
                            sd = sd(carbonVal,na.rm=TRUE))]
 
+viterbiResults <- list(csNonForest = carbonStockDatNonForest,csForest = carbonStockDatForest,landuse = landUseOverTime)
 
+saveRDS(viterbiResults, file.path(carbonStockResultsPath, sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels,rasterYear)))
 
 ## library(ggplot2)
 ## plt <- ggplot(carbonStockDatForest,aes(x = forest_age, y = carbonVal)) + stat_summary()
