@@ -152,29 +152,38 @@ landUseLevels <- c(forest = which(estimates$mapbiomas_classes_to_keep == forest_
                    ag_past = which(estimates$mapbiomas_classes_to_keep == agriculture_and_pasture_class),
                    water_rocks = which(estimates$mapbiomas_classes_to_keep == agriculture_and_pasture_class))
 landUseOverTime[,recodedLandUse.viterbiF := factor(recodedLandUse.viterbi,levels = landUseLevels,labels = names(landUseLevels))]
+landUseOverTime[,recodedLandUse.yF := factor(recodedLandUse.y,levels = landUseLevels,labels = names(landUseLevels))]
 
 ##Recover estimates of carbon stock for different age forests (using year rasterYear map of carbon stock)
-landUseOverTime[,forestDum := recodedLandUse.viterbiF == 'forest']
-laggedVals <- landUseOverTime[,shift(.SD,0:(rasterYear-min(year)),give.names=TRUE),.SDcols = 'forestDum',by = 'pixelMapBiomasIndex']
+landUseOverTime[,forestDumV := recodedLandUse.viterbiF == 'forest']
+landUseOverTime[,forestDumY := recodedLandUse.yF == 'forest']
+laggedValsV <- landUseOverTime[,data.table::shift(.SD,0:(max(year)-min(year)),give.names=TRUE),.SDcols = 'forestDumV',by = 'pixelMapBiomasIndex']
+laggedValsY <- landUseOverTime[,data.table::shift(.SD,0:(max(year)-min(year)),give.names=TRUE),.SDcols = 'forestDumY',by = 'pixelMapBiomasIndex']
 
-
-carbonStockDatForest <- cbind(laggedVals,landUseOverTime[,list(year)])
-carbonStockDatForest <- carbonStockDatForest[year == rasterYear & forestDum_lag_0 == TRUE]
-carbonStockDatForest[,year :=NULL]
 
 ##Get age of forest
+forestAgeDat <- cbind(laggedValsV,laggedValsY,landUseOverTime[,list(year)])
+
+
 ##The Position function gives the first lag in which something other than forest is in the data (so that is the age of the forest)
-carbonStockDatForest[, forest_age := apply(.SD, MARGIN = 1, FUN = Position,f=function(x) ifelse(is.na(x),FALSE,!x), nomatch = Inf),
-               .SDcols = grep('forestDum_lag_[1-9]{1}[0-9]{0,1}',names(carbonStockDatForest))]
-set(carbonStockDatForest, ,grep('forestDum_lag_[0-9]{1}[0-9]{0,1}',names(carbonStockDatForest)),NULL)
+forestAgeDat[forestDumV_lag_0 == TRUE, forest_ageV := apply(.SD, MARGIN = 1, FUN = Position,f=function(x) ifelse(is.na(x),FALSE,!x), nomatch = Inf),
+             .SDcols = grep('forestDumV_lag_[1-9]{1}[0-9]{0,1}',names(forestAgeDat))]
+forestAgeDat[forestDumY_lag_0 == TRUE, forest_ageY := apply(.SD, MARGIN = 1, FUN = Position,f=function(x) ifelse(is.na(x),FALSE,!x), nomatch = Inf),
+               .SDcols = grep('forestDumY_lag_[1-9]{1}[0-9]{0,1}',names(forestAgeDat))]
+
+set(forestAgeDat, ,grep('forestDumV_lag_[1-9]{1}[0-9]{0,1}',names(forestAgeDat)),NULL)
+set(forestAgeDat, ,grep('forestDumY_lag_[1-9]{1}[0-9]{0,1}',names(forestAgeDat)),NULL)
+
+
 
 ##Get carbon stock for landuses
 ##first forest
+carbonStockDatForest <- forestAgeDat[year == rasterYear & forestDumV_lag_0 == TRUE]
 carbonStockDatForest[,c('xCoord', 'yCoord') := data.frame(xyFromCell(mapbiomas, pixelMapBiomasIndex))]
 carbonStockDatForest[,carbonVal := terra::extract(carbonRaster, cbind(x=xCoord,y=yCoord))]
 
 ##Get CarbonStock for non-forest
-carbonStockDatNonForest <- landUseOverTime[(forestDum == FALSE |is.na(forestDum))& year == rasterYear,
+carbonStockDatNonForest <- landUseOverTime[(forestDumV == FALSE |is.na(forestDumV))& year == rasterYear,
                                            list(pixelMapBiomasIndex,recodedLandUse.viterbiF)]
 carbonStockDatNonForest[,c('xCoord', 'yCoord') := data.frame(xyFromCell(mapbiomas, pixelMapBiomasIndex))]
 carbonStockDatNonForest[,carbonVal := terra::extract(carbonRaster, cbind(x=xCoord,y=yCoord))]
@@ -188,7 +197,7 @@ carbonStockDatNonForest[,list(avg = mean(carbonVal,na.rm=TRUE),
 carbonStockDatForest[,list(avg = mean(carbonVal,na.rm=TRUE),
                            sd = sd(carbonVal,na.rm=TRUE))]
 
-viterbiResults <- list(csNonForest = carbonStockDatNonForest,csForest = carbonStockDatForest,landuse = landUseOverTime)
+viterbiResults <- list(csNonForest = carbonStockDatNonForest,csForest = carbonStockDatForest,landuse = forestAgeDat)
 
 saveRDS(viterbiResults, file.path(carbonStockResultsPath, sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels,rasterYear)))
 
