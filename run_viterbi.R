@@ -1,28 +1,65 @@
+#!/usr/bin/env Rscript
+
+rm(list =ls())
 library(parallel)
 library(raster)
+library(data.table)
+library(stringr)
+library(optparse)
 
 source("src/hmm_functions.R")
+hmmResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/mapbiomas_estimates_rds_files'
+carbonStockResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'
 
-row <- 76001
-col <- 28001
-width_in_pixels <- 1000
+opt_list <- list(make_option("--row", default=28001, type="integer"),
+                 make_option("--col", default=67001, type="integer"),
+                 make_option("--width_in_pixels", default=1000, type="integer"),
+                 make_option("--raster_year", default=2017, type ="integer"),
+                 make_option("--subsample", default=0.01, type="double"))
 
+opt <- parse_args(OptionParser(option_list=opt_list))
+message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
+
+yearsVec <- 1985:2020
+row <- opt$row
+col <- opt$col
+width_in_pixels <- opt$width_in_pixels
+subsample_for_viterbi <- opt$subsample
+rasterYear <- opt$raster_year
+
+##Results file
 filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_use_md_as_initial_values_for_em.rds", row, col, width_in_pixels)
+fullFilePath <- file.path(hmmResultsPath,filename)
+if (!file.exists(fullFilePath)){
+    message('No Estimates for this Window -- exiting')
+    q('no')
+}
+estimates <- readRDS(fullFilePath)
 
-estimates <- readRDS(filename)
-
-subsample_for_viterbi <- 0.01
-
+##Import mapbiomas
 mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 mapbiomas <- stack(mapBioMassFile)
 
+
+##Carbon Stock File (file is Carbon Stock in rasterYear)
+carbonFile <- paste0('/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_data/carbonStockRaster',rasterYear,'.tif')
+carbonRaster <- terra::rast(carbonFile)
+
+## Stop analysis if pr_y is not diagnoally dominant
+if(any(diag(estimates$em_params_hat_best_likelihood$pr_y)<.5)) stop()
+
+##Get values for analysis from mapbiomas raster
 window <- getValuesBlock(mapbiomas,
                          row=row,
                          col=col,
                          nrows=width_in_pixels,
                          ncols=width_in_pixels)
 
-dim(window)
+cellsToPull <- cellFromRowColCombine(mapbiomas, seq(row,row+width_in_pixels-1),seq(col,col+width_in_pixels-1))
+
+##Window 2 is equivalent to Window
+##window2 <- extract(mapbiomas,cellsToPull)
+
 
 opt <- estimates$opt
 mapbiomas_classes_to_keep <- estimates$mapbiomas_classes_to_keep
@@ -77,19 +114,93 @@ window_recoded[window %in% rare_mapbiomas_classes] <- NA
 full_panel <- apply(window_recoded, 1, function(y) list(y=as.vector(y), time=seq_along(y)))
 
 ## Using prob=valid_pixel_index excludes pixels that have 100% missing observations in the original data
-panel <- sample(full_panel, size=length(full_panel) * subsample_for_viterbi, replace=FALSE, prob=valid_pixel_index)
+pixelsToUse <- sample.int(length(full_panel), size=length(full_panel) * subsample_for_viterbi, replace=FALSE, prob=valid_pixel_index)
+panel <- full_panel[pixelsToUse]
 
-viterbi <- apply_viterbi_path_in_parallel(panel, params_hat=estimates$em_params_hat_best_likelihood, max_cores=30)
+##Viterbi
+viterbi <- apply_viterbi_path_in_parallel(panel, params_hat=estimates$em_params_hat_best_likelihood, max_cores=1)
 
-## This is the most likely sequence of hidden states for the first pixel
-## Compare to panel[[1]]$y
-viterbi[[1]]
+##Process Viterbi Output
+startCellVal <- cellFromRowCol(mapbiomas,row,col)
 
-## To see these as mapbiomas classes, use estimates$mapbiomas_classes_to_keep
-## For example:
+## pixelTmpIndex is the row number of the pixel in the panel list
+viterbiDTWide <- as.data.table(viterbi)[,year := yearsVec]
+obsDTWide <- as.data.table(lapply(panel,function(dat) dat$y))[,year := yearsVec]
+viterbiDT <- melt(viterbiDTWide,
+                        id.var = 'year',
+                        variable.name = 'pixelTmpIndex',
+                        value.name = 'recodedLandUse')
+obsDT <- melt(obsDTWide,
+                        id.var = 'year',
+                        variable.name = 'pixelTmpIndex',
+                        value.name = 'recodedLandUse')
+landUseOverTime <- merge(viterbiDT, obsDT, by = c('year','pixelTmpIndex'),suffixes = c('.viterbi','.y'))
+landUseOverTime[,pixelTmpIndex  := as.integer(str_replace(pixelTmpIndex,'V',''))]
+
+##Map from pixelTmpIndex to pixelOrigIndex (from index in calculations mapbiomas raster)
+pixelMapping <- data.table(pixelTmpIndex = 1:length(pixelsToUse),
+                           pixelWindowIndex = pixelsToUse,
+                           pixelMapBiomasIndex = cellsToPull[pixelsToUse])
+landUseOverTime <- merge(landUseOverTime, pixelMapping, by = 'pixelTmpIndex',all.x=TRUE)
+
+
+## Recode as as mapbiomas classes, use estimates$mapbiomas_classes_to_keep
 forest_class <- 3
 agriculture_and_pasture_class <- 21
-forest_index <- which(estimates$mapbiomas_classes_to_keep == forest_class)
+water_rocks_class <- 33
+landUseLevels <- c(forest = which(estimates$mapbiomas_classes_to_keep == forest_class),
+                   ag_past = which(estimates$mapbiomas_classes_to_keep == agriculture_and_pasture_class),
+                   water_rocks = which(estimates$mapbiomas_classes_to_keep == agriculture_and_pasture_class))
+landUseOverTime[,recodedLandUse.viterbiF := factor(recodedLandUse.viterbi,levels = landUseLevels,labels = names(landUseLevels))]
+landUseOverTime[,recodedLandUse.yF := factor(recodedLandUse.y,levels = landUseLevels,labels = names(landUseLevels))]
 
-## When was the first pixel forest?
-viterbi[[1]] == forest_index
+##Recover estimates of carbon stock for different age forests (using year rasterYear map of carbon stock)
+landUseOverTime[,forestDumV := recodedLandUse.viterbiF == 'forest']
+landUseOverTime[,forestDumY := recodedLandUse.yF == 'forest']
+laggedValsV <- landUseOverTime[,data.table::shift(.SD,0:(max(year)-min(year)),give.names=TRUE),.SDcols = 'forestDumV',by = 'pixelMapBiomasIndex']
+laggedValsY <- landUseOverTime[,data.table::shift(.SD,0:(max(year)-min(year)),give.names=TRUE),.SDcols = 'forestDumY',by = 'pixelMapBiomasIndex']
+
+
+##Get age of forest
+forestAgeDat <- cbind(laggedValsV,laggedValsY,landUseOverTime[,list(year)])
+
+
+##The Position function gives the first lag in which something other than forest is in the data (so that is the age of the forest)
+forestAgeDat[forestDumV_lag_0 == TRUE, forest_ageV := apply(.SD, MARGIN = 1, FUN = Position,f=function(x) ifelse(is.na(x),FALSE,!x), nomatch = Inf),
+             .SDcols = grep('forestDumV_lag_[1-9]{1}[0-9]{0,1}',names(forestAgeDat))]
+forestAgeDat[forestDumY_lag_0 == TRUE, forest_ageY := apply(.SD, MARGIN = 1, FUN = Position,f=function(x) ifelse(is.na(x),FALSE,!x), nomatch = Inf),
+               .SDcols = grep('forestDumY_lag_[1-9]{1}[0-9]{0,1}',names(forestAgeDat))]
+
+set(forestAgeDat, ,grep('forestDumV_lag_[1-9]{1}[0-9]{0,1}',names(forestAgeDat)),NULL)
+set(forestAgeDat, ,grep('forestDumY_lag_[1-9]{1}[0-9]{0,1}',names(forestAgeDat)),NULL)
+
+
+
+##Get carbon stock for landuses
+##first forest
+carbonStockDatForest <- forestAgeDat[year == rasterYear & forestDumV_lag_0 == TRUE]
+carbonStockDatForest[,c('xCoord', 'yCoord') := data.frame(xyFromCell(mapbiomas, pixelMapBiomasIndex))]
+carbonStockDatForest[,carbonVal := terra::extract(carbonRaster, cbind(x=xCoord,y=yCoord))]
+
+##Get CarbonStock for non-forest
+carbonStockDatNonForest <- landUseOverTime[(forestDumV == FALSE |is.na(forestDumV))& year == rasterYear,
+                                           list(pixelMapBiomasIndex,recodedLandUse.viterbiF)]
+carbonStockDatNonForest[,c('xCoord', 'yCoord') := data.frame(xyFromCell(mapbiomas, pixelMapBiomasIndex))]
+carbonStockDatNonForest[,carbonVal := terra::extract(carbonRaster, cbind(x=xCoord,y=yCoord))]
+
+
+##Get averages of carbon stock for forest and non-forest
+carbonStockDatNonForest[,list(avg = mean(carbonVal,na.rm=TRUE),
+                              sd = sd(carbonVal,na.rm = TRUE)),
+                        by = recodedLandUse.viterbiF]
+
+carbonStockDatForest[,list(avg = mean(carbonVal,na.rm=TRUE),
+                           sd = sd(carbonVal,na.rm=TRUE))]
+
+viterbiResults <- list(csNonForest = carbonStockDatNonForest,csForest = carbonStockDatForest,landuse = forestAgeDat)
+
+saveRDS(viterbiResults, file.path(carbonStockResultsPath, sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels,rasterYear)))
+
+## library(ggplot2)
+## plt <- ggplot(carbonStockDatForest,aes(x = forest_age, y = carbonVal)) + stat_summary()
+## ggsave('temp.png')
