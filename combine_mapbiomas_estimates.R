@@ -11,11 +11,11 @@ estimate_filenames <- list.files(path=fileDir,
 
 crs_longlat <- CRS("+proj=longlat")
 
-brazil_states <- readOGR(dsn="./state_boundaries/", layer="BRUFE250GC_SIR")
+brazil_states <- readOGR(dsn="/home/ted/Dropbox/amazon_hmm_shared/Maps_administrative/state_boundaries/", layer="BRUFE250GC_SIR")
 brazil_state_names <- brazil_states$NM_ESTADO
 brazil_state_polygons <- as(brazil_states, "SpatialPolygons")
 
-brazil_municipalities <- readOGR(dsn="./munic_boundaries/", layer="BRMUE250GC_SIR")
+brazil_municipalities <- readOGR(dsn="/home/ted/Dropbox/amazon_hmm_shared/Maps_administrative/munic_boundaries/", layer="BRMUE250GC_SIR")
 brazil_municipality_names <- brazil_municipalities$NM_MUNICIP
 brazil_municipality_polygons <- as(brazil_municipalities, "SpatialPolygons")
 
@@ -174,7 +174,7 @@ message("Summary stats for MD deforestation rates:")
 print(summary(df$deforestation_rate_md))
 
 df$window_id <- sprintf("%s_%s", df$window_row, df$window_col)
-df$year = df$time_index + 1984
+df$year = df$time_index + 1985 ##changed from 1984 -- since the first year (1985) is elimianted b/c of the lag
 
 filename <- sprintf("estimated_deforestation_rates_%s_use_md_as_initial_values_for_em.csv", format(Sys.time(), "%Y_%m_%d"))
 message("Writing ", filename, ", dataframe dim is ", nrow(df), " by ", ncol(df))
