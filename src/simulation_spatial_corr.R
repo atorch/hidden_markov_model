@@ -9,13 +9,14 @@ source("ising.R")
 
 set.seed(321123)
 
-opt_list <- list(make_option("--n_simulations", default=50, type="integer"),
-                 make_option("--z_constant_over_time", action="store_true", default=FALSE))
+opt_list <- list(make_option("--n_simulations", default=100, type="integer"),
+                 make_option("--z_constant_over_time", action="store_true", default=FALSE),
+                 make_option("--use_md_as_initial_values_for_em", action="store_true", default=FALSE))
 opt <- parse_args(OptionParser(option_list=opt_list))
 
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
-run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_per_side) {
+run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_per_side, use_md_as_initial_values_for_em) {
 
     ## In this simulation, we want the hidden state S_{it}
     ## to vary at the _field_ level rather than the pixel level
@@ -109,7 +110,9 @@ run_single_simulation <- function(simulation_id, params0, adjacency, n_pixels_pe
                     pixel_j=pixel_j))
     })
 
-    estimates <- get_em_and_min_dist_estimates_random_initialization(params=params0, panel=pixel_panel)
+    estimates <- get_em_and_min_dist_estimates_random_initialization(params=params0,
+                                                                     panel=pixel_panel,
+                                                                     use_md_as_initial_values_for_em=use_md_as_initial_values_for_em)
 
     return(list(pixel_panel=pixel_panel,
                 estimates=estimates,
@@ -141,7 +144,7 @@ params0$z_constant_over_time <- opt$z_constant_over_time
 
 for(pr_missing_data in c(0.0, 0.1)) {
     ## TODO Make this a parameter
-    for(include_z_in_simulation in c(TRUE, FALSE)) {
+    for(include_z_in_simulation in c(FALSE, TRUE)) {
 
         if(include_z_in_simulation) {
             ising_beta_values <- c(2.0, 0.0)                        
@@ -158,37 +161,6 @@ for(pr_missing_data in c(0.0, 0.1)) {
                 params0$ising_beta <- ising_beta
                 params0$pr_missing_data <- pr_missing_data
 
-                max_cores <- 12
-                num_cores <- min(detectCores(), max_cores)
-                cluster <- makeCluster(num_cores)  # Call stopCluster when done
-
-                clusterExport(cluster, c("baum_welch",
-                                         "eq_function_minimum_distance",
-                                         "get_expectation_maximization_estimates",
-                                         "get_em_and_min_dist_estimates_random_initialization",
-                                         "get_min_distance_estimates",
-                                         "get_random_initial_parameters",
-                                         "get_transition_probs_from_M_S_joint",
-                                         "is_diag_dominant",
-                                         "objfn_minimum_distance",
-                                         "run_single_simulation",
-                                         "simulate_discrete_markov",
-                                         "simulate_hmm",
-                                         "simulate_ising",
-                                         "valid_panel_element",
-                                         "valid_parameters"))
-
-                message("Running simulation with params:")
-                print(params0)
-                simulations <- parLapply(cluster,
-                                         seq_len(opt$n_simulations),
-                                         run_single_simulation,
-                                         params0=params0,
-                                         adjacency=adjacency,
-                                         n_pixels_per_side=n_pixels_per_side)
-        
-                stopCluster(cluster)
-
                 z_correlation_description <- ""
                 if(include_z_in_simulation) {
                     if(params0$z_constant_over_time) {
@@ -198,16 +170,55 @@ for(pr_missing_data in c(0.0, 0.1)) {
                     }
                 }
 
-                simulations_filename <- sprintf("spatial_corr_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.rds",
+                simulations_filename <- sprintf("spatial_corr_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations_use_md_as_initial_values_for_em_%s.rds",
                                                 params0$n_fields,
                                                 pr_missing_data,
                                                 include_z_in_simulation,
                                                 z_correlation_description,
                                                 params0$ising_beta,
-                                                opt$n_simulations)
-                saveRDS(simulations, simulations_filename)
+                                                opt$n_simulations,
+                                                opt$use_md_as_initial_values_for_em)
 
-                ## TODO Include summary stats about Z in simulation summary?  Should be around 50-50 for high and low "clouds"
+                if(file.exists(simulations_filename)) {
+                    ## Useful for adjusting graphs without having to rerun the simulations from the beginning
+                    message(simulations_filename, " already exists, loading it without rerunning simulations")
+                    simulations <- readRDS(simulations_filename)
+                } else {
+                    message(simulations_filename, " does not exist, running simulations now")
+                    max_cores <- 10
+                    num_cores <- min(detectCores(), max_cores)
+                    cluster <- makeCluster(num_cores)  # Call stopCluster when done
+
+                    clusterExport(cluster, c("baum_welch",
+                                             "eq_function_minimum_distance",
+                                             "get_expectation_maximization_estimates",
+                                             "get_em_and_min_dist_estimates_random_initialization",
+                                             "get_min_distance_estimates",
+                                             "get_random_initial_parameters",
+                                             "get_transition_probs_from_M_S_joint",
+                                             "is_diag_dominant",
+                                             "objfn_minimum_distance",
+                                             "run_single_simulation",
+                                             "simulate_discrete_markov",
+                                             "simulate_hmm",
+                                             "simulate_ising",
+                                             "valid_panel_element",
+                                             "valid_parameters"))
+
+                    message("Running simulation with params:")
+                    print(params0)
+                    simulations <- parLapply(cluster,
+                                             seq_len(opt$n_simulations),
+                                             run_single_simulation,
+                                             params0=params0,
+                                             adjacency=adjacency,
+                                             n_pixels_per_side=n_pixels_per_side,
+                                             use_md_as_initial_values_for_em=opt$use_md_as_initial_values_for_em)
+
+                    stopCluster(cluster)
+
+                    saveRDS(simulations, simulations_filename)
+                }
 
                 simulation_summaries_pr_y <- lapply(simulations, function(simulation) {
                     data.table(
@@ -254,8 +265,8 @@ for(pr_missing_data in c(0.0, 0.1)) {
                 p <- (ggplot(simulation_summary_pr_y_melt, aes(x=algorithm, y=value)) +
                       geom_boxplot() +
                       ylab("probability") +
+                      xlab("") +
                       theme_bw() +
-                      ggtitle(title) +
                       theme(plot.title = element_text(hjust = 0.5)) +
                       facet_wrap(~ pr_y_label) +
                       geom_hline(aes(yintercept=true_transition), linetype="dashed"))
@@ -304,8 +315,8 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       geom_boxplot() +
                       geom_hline(aes(yintercept=true_transition), linetype="dashed") +
                       ylab("transition probability") +
+                      xlab("") +
                       theme_bw() +
-                      ggtitle(title) +
                       theme(plot.title = element_text(hjust = 0.5)) +
                       ylim(c(0, 0.65)) +                      
                       facet_grid(state_label ~ time_label))
@@ -350,7 +361,6 @@ for(pr_missing_data in c(0.0, 0.1)) {
                 p <- (ggplot(dtable, aes(x=pixel_i, y=pixel_j, fill=factor(classification_error_label))) +
                       facet_wrap(~ time_label) +
                       geom_raster() +
-                      ggtitle(title) +
                       theme(plot.title = element_text(hjust = 0.5)) +
                       scale_fill_manual("classification outcome", values=c("grey", "red")) +
                       xlab("pixel coordinate (easting)") +

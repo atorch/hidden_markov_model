@@ -103,6 +103,7 @@ get_min_distance_estimates_time_homogeneous <- function(initial_params, M_Y_join
 get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
 
     message("Starting min dist estimation, initial values for diagonals of Pr[ Y | S ] matrix are: ")
+    time_started_md <- Sys.time()
     print(diag(initial_params$pr_y))
 
     M_S_joint_list_initial <- lapply(seq_along(initial_params$P_list), function(time_index) {
@@ -156,7 +157,9 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
                                 mu=colSums(M_S_joint_list_hat_solnp[[1]]),
                                 objfn_values=solnp_result$values,
                                 x_guess=x_guess,
-                                n_components=initial_params$n_components)
+                                n_components=initial_params$n_components,
+                                time_started_md=time_started_md,
+                                time_finished_md=Sys.time())
 
     return(min_dist_params_hat)
 
@@ -603,6 +606,7 @@ get_expectation_maximization_estimates <- function(panel, params, max_iter, epsi
     ## https://www.princeton.edu/~rvan/orf557/hmm080728.pdf
 
     message("starting em, time is ", Sys.time(), ", initial values for diagonals of Pr[ Y | S ] matrix are: ")
+    params$time_started_em <- Sys.time()
     print(diag(params$pr_y))
 
     stopifnot(valid_parameters(params))
