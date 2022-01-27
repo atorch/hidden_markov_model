@@ -17,8 +17,8 @@ set.seed(321321)
 ## Cells could be regions in a country, for example
 nCells <- 100
 
-## These are predictors / Xs / covariates that vary at the cell level
-xVec <- rnorm(nCells)
+## These are predictors / Xs / covariates that vary at the cell level. These X's are binary -- simulating a policy implemented in 20% of regions
+xVec <- runif(nCells)<.2
 
 ## The true deforestation rate (in period 3) varies with X, at the cell level
 alpha <- -3
@@ -27,7 +27,7 @@ trueDeforestPr <- exp(alpha + beta * xVec) / (1+exp(alpha + beta * xVec))
 
 nPixelPerCell <- 1000
 
-nSim <- 100
+nSim <- 1000
 
 params0 <- get_params0()
 
