@@ -1,7 +1,4 @@
 ## TODO Run with more simulations (50, 100?)
-## Then check RMSEs
-
-## TODO Make sure I'm saving MD runtimes, need to account for those (in MD+ML)
 
 ## Value used in simulation_spatial_corr.R for P_list[[1]][1, 2]
 true_deforestation_rate <- 0.04
@@ -56,3 +53,37 @@ t.test(em_squared_error_using_random_initial_values, md_squared_error)
 t.test(em_runtimes_using_md_as_initial_values, em_runtimes_using_random_initial_values)
 t.test(em_iterations_using_md_as_initial_values, em_iterations_using_random_initial_values)
 t.test(em_squared_error_using_md_as_initial_values, em_squared_error_using_random_initial_values)
+
+## 400 sims
+## TODO Also check this with smaller n_fields (lower effective sample size), does that change RMSE results?
+sims = readRDS("spatial_corr_n_fields_10000_pr_missing_data_0_include_z_FALSE_ising_beta_0_400_simulations_use_md_as_initial_values_for_em_TRUE.rds")
+sims = readRDS("spatial_corr_n_fields_100_pr_missing_data_0_include_z_FALSE_ising_beta_0_400_simulations_use_md_as_initial_values_for_em_TRUE.rds")
+
+true_deforestation_rate <- 0.04
+true_reforestation_rate <- 0.02
+
+md_squared_error <- sapply(sims, function(sim) {
+    estimated_deforestation_rate <- sim$estimates$min_dist_params_hat[[1]]$P_list[[1]][1, 2]
+    return((estimated_deforestation_rate - true_deforestation_rate)^2)
+})
+md_error <- sapply(sims, function(sim) {
+    estimated_deforestation_rate <- sim$estimates$min_dist_params_hat[[1]]$P_list[[1]][1, 2]
+    return(estimated_deforestation_rate - true_deforestation_rate)
+})
+em_squared_error_using_md_as_initial_values <- sapply(sims, function(sim) {
+    estimated_deforestation_rate <- sim$estimates$em_params_hat_list[[1]]$P_list[[1]][1, 2]
+    return((estimated_deforestation_rate - true_deforestation_rate)^2)
+})
+
+md_squared_error_reforestation <- sapply(sims, function(sim) {
+    estimated_deforestation_rate <- sim$estimates$min_dist_params_hat[[1]]$P_list[[1]][2, 1]
+    return((estimated_deforestation_rate - true_reforestation_rate)^2)
+})
+em_squared_error_using_md_as_initial_values_reforestation <- sapply(sims, function(sim) {
+    estimated_deforestation_rate <- sim$estimates$em_params_hat_list[[1]]$P_list[[1]][2, 1]
+    return((estimated_deforestation_rate - true_reforestation_rate)^2)
+})
+
+t.test(md_error, mu=0)
+t.test(md_squared_error, em_squared_error_using_md_as_initial_values)
+t.test(md_squared_error_reforestation, em_squared_error_using_md_as_initial_values_reforestation)
