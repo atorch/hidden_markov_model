@@ -49,7 +49,9 @@ for (s in 1:nSim){
                        )
                                                      
     viterbiList <- lapply(1:length(xVec),
-                          function(i) apply_viterbi_path_in_parallel(datDrawY[[i]], params_hat=params0_hat[[i]], max_cores=8))
+                          function(i) apply_viterbi_path_in_parallel(datDrawY[[i]],
+                                                                     params_hat=params0_hat[[i]],
+                                                                     max_cores=8))
 
     ##Reshape data for estimation
     dataSetList <- list()
@@ -99,4 +101,8 @@ estimSReg <- ldply(regResList,function(res) coefficients(res$estimSVal))
 allRegDat <- rbindlist(list(Raw = yReg, S = trueSReg, Viterbi = viterbiReg,EstimS = estimSReg),idcol = 'typ')
 library(ggplot2)
 
-ggplot(allRegDat,aes(color = typ,x = xVal)) + geom_density()
+##Main MC graph
+ggplot(allRegDat,aes(x = typ,y = xVal)) + geom_boxplot()
+
+##Graph to check deforestation rates from different approaches
+ggplot(regressionData, aes(x = xVal, y = deforestRate, color = variable)) + geom_point()
