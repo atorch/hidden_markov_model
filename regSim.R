@@ -1,3 +1,4 @@
+rm(list=ls())
 library(Rsolnp)
 library(data.table)
 library(ggplot2)
@@ -17,17 +18,17 @@ set.seed(321321)
 ## Cells could be regions in a country, for example
 nCells <- 100
 
-## These are predictors / Xs / covariates that vary at the cell level. These X's are binary -- simulating a policy implemented in 20% of regions
+## These are predictors / Xs / covariates that vary at the cell level. These X's are binary -- simulating a policy implemented in 20% of cells/regions
 xVec <- runif(nCells)<.2
 
 ## The true deforestation rate (in period 3) varies with X, at the cell level
-alpha <- -3
-beta <- 1
-trueDeforestPr <- exp(alpha + beta * xVec) / (1+exp(alpha + beta * xVec))
+alpha <- .2
+beta <- -.1
+trueDeforestPr <- alpha + xVec*beta
 
 nPixelPerCell <- 1000
 
-nSim <- 1000
+nSim <- 100
 
 params0 <- get_params0()
 
@@ -122,10 +123,10 @@ for (s in 1:nSim){
     estimated_deforestation_rates_ground_truth <- sapply(datDraw, get_estimated_deforestation_rate_ground_truth)
 
     ## Run regressions with various left hand side deforestation rates
-    coef_observations <- coefficients(glm(estimated_deforestation_rates_observations ~ xVec, family = 'binomial'))
-    coef_ground_truth <- coefficients(glm(estimated_deforestation_rates_ground_truth ~ xVec, family = 'binomial'))
-    coef_viterbi_ml <- coefficients(glm(estimated_deforestation_rates_viterbi_ml ~ xVec, family = 'binomial'))
-    coef_ml <- coefficients(glm(estimated_deforestation_rates_ml ~ xVec, family = 'binomial'))
+    coef_observations <- coefficients(lm(estimated_deforestation_rates_observations ~ xVec))
+    coef_ground_truth <- coefficients(lm(estimated_deforestation_rates_ground_truth ~ xVec))
+    coef_viterbi_ml <- coefficients(lm(estimated_deforestation_rates_viterbi_ml ~ xVec))
+    coef_ml <- coefficients(lm(estimated_deforestation_rates_ml ~ xVec))
 
     df <- data.frame(rbind(coef_observations, coef_viterbi_ml, coef_ml, coef_ground_truth))
     df$lhs_var <- str_replace(row.names(df), "coef_", "")
