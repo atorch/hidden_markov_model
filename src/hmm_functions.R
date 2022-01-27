@@ -271,6 +271,7 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
 
     return(list("panel_size"=length(panel),
                 "M_Y_joint_hat"=M_Y_joint_hat_list,
+                "M_fixed_y_Y_joint_hat_list"=M_fixed_y_Y_joint_hat_list,
                 "em_params_hat_list"=em_params_hat_list,
                 "em_params_hat_loglikelihoods"=em_likelihoods,
                 "initial_parameters_em"=initial_parameters_em,
