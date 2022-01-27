@@ -41,8 +41,15 @@ for (s in 1:nSim){
     params0_hat <- mclapply(datDraw,
                             function(x) get_expectation_maximization_estimates(x, params0, max_iter=20, epsilon=0.001),mc.cores=8)
 
+    datDrawY <- lapply(datDraw,
+                       function(cell)
+                           lapply(cell,                              
+                                  function(dat) list(y = dat$y, time = seq_along(dat$y))
+                                  )
+                       )
+                                                     
     viterbiList <- lapply(1:length(xVec),
-                          function(i) apply_viterbi_path_in_parallel(datDraw[[i]], params_hat=params0_hat[[i]], max_cores=8))
+                          function(i) apply_viterbi_path_in_parallel(datDrawY[[i]], params_hat=params0_hat[[i]], max_cores=8))
 
     ##Reshape data for estimation
     dataSetList <- list()
@@ -67,6 +74,11 @@ for (s in 1:nSim){
     regressionData <- dataSetMelt[t == 4 & valueLag == 1, list(deforestRate = mean(value==2)),
                                   by = list(cellID,variable)]
 
+    estimatedSData <- data.table(cellID = 1:length(xVec),
+                                 variable = 'estimSVal',
+                                 deforestRate = sapply(params0_hat, function(x) x$P_list[[3]][1,2]))
+
+    regressionData <- rbindlist(list(regressionData,estimatedSData))
     regressionData <- merge(regressionData,
                             data.table(cellID = 1:length(xVec),xVal = xVec))
 
@@ -76,3 +88,15 @@ for (s in 1:nSim){
                     function(dat) glm(deforestRate ~ xVal, family = 'binomial',data =dat))
 
 }
+
+yReg <- ldply(regResList,function(res) coefficients(res$yVal))
+trueSReg <- ldply(regResList,function(res) coefficients(res$trueSVal))
+viterbiReg <- ldply(regResList,function(res) coefficients(res$viterbiVal))
+estimSReg <- ldply(regResList,function(res) coefficients(res$estimSVal))
+
+
+
+allRegDat <- rbindlist(list(Raw = yReg, S = trueSReg, Viterbi = viterbiReg,EstimS = estimSReg),idcol = 'typ')
+library(ggplot2)
+
+ggplot(allRegDat,aes(color = typ,x = xVal)) + geom_density()
