@@ -19,28 +19,36 @@ set.seed(321321)
 nCells <- 100
 
 ## These are predictors / Xs / covariates that vary at the cell level. These X's are binary -- simulating a policy implemented in 20% of cells/regions
-xVec <- runif(nCells)<.2
+xVec <- runif(nCells) < .2
 
 ## The true deforestation rate (in period 3) varies with X, at the cell level
-alpha <- .2
-beta <- -.1
-trueDeforestPr <- alpha + xVec*beta
+alpha <- .15
+beta <- -.10
+trueDeforestPr <- alpha + xVec * beta
 
 nPixelPerCell <- 1000
 
-nSim <- 100
+nSim <- 12  # TODO Turn back up to 100
 
 params0 <- get_params0()
+
+## Initially, params0 has 3 transition probability matrices (i.e. 4 periods)
+## Let's add more periods (so that we simulate longer timeseries at each pixel)
+n_extra_periods <- 3
+for(i in seq_len(n_extra_periods)) {
+    params0$P_list[[length(params0$P_list) + 1]] <- params0$P_list[[1]]
+}
 
 tMax <- length(params0$P_list) + 1  # Number of time periods
 
 ## Deforestation only varies (with respect to xVec) in the 3rd period
 ## These parameters are held fixed across simulations
+deforestation_time_index <- 3  # This is the period in which we are interested in measuring how deforestation varies wrt xVec
 paramList <- list()
 for (i in 1:length(xVec)) {
     paramList[[i]] <- params0
-    paramList[[i]]$P_list[[3]][1,2] <- trueDeforestPr[i]
-    paramList[[i]]$P_list[[3]][1,1] <- 1 - trueDeforestPr[i]
+    paramList[[i]]$P_list[[deforestation_time_index]][1, 2] <- trueDeforestPr[i]
+    paramList[[i]]$P_list[[deforestation_time_index]][1, 1] <- 1 - trueDeforestPr[i]
 }
 
 simulate_one_cell <- function(params) {
@@ -61,7 +69,7 @@ get_estimated_deforestation_rate_viterbi <- function(panel) {
         with(subset(dtable, time == fixed_t), prop.table(table(y_viterbi_one_period_ahead, y)))
     })
 
-    return(get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[3]])[1, 2])
+    return(get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[deforestation_time_index]])[1, 2])
 }
 
 get_estimated_deforestation_rate_observations <- function(panel) {
@@ -73,7 +81,7 @@ get_estimated_deforestation_rate_observations <- function(panel) {
         with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
     })
 
-    return(get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[3]])[1, 2])
+    return(get_transition_probs_from_M_S_joint(M_Y_joint_hat_list[[deforestation_time_index]])[1, 2])
 }
 
 get_estimated_deforestation_rate_ground_truth <- function(panel) {
@@ -88,7 +96,7 @@ get_estimated_deforestation_rate_ground_truth <- function(panel) {
         with(subset(dtable, time == fixed_t), prop.table(table(x_one_period_ahead, x)))
     })
 
-    return(get_transition_probs_from_M_S_joint(M_S_joint_hat_list[[3]])[1, 2])
+    return(get_transition_probs_from_M_S_joint(M_S_joint_hat_list[[deforestation_time_index]])[1, 2])
 }
 
 regResList <- list()
