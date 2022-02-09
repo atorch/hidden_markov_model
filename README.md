@@ -14,5 +14,6 @@ by Adrian L. Torchiana, Ted Rosenbaum, Paul T. Scott, and Eduardo Souza-Rodrigue
 sudo docker build -f ~/hidden_markov_model/Dockerfile ~/hidden_markov_model --tag=hidden_markov_model
 sudo docker run -it -v ~/hidden_markov_model:/home/hidden_markov_model hidden_markov_model bash
 cd /home/hidden_markov_model/src/
-Rscript simulation_counties.R
+Rscript simulation_simple.R
+Rscript simulation_spatial_corr.R --n_simulations 100
 ```

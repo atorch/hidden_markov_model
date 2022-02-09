@@ -1,13 +1,9 @@
 library(Rsolnp)
 library(data.table)
-library(ggplot2)
 library(grid)
-library(latex2exp)  # For ggplot2 xlab
 
 source("hmm_functions.R")
 source("hmm_parameters.R")
-source("ggplot_utils.R")
-set_ggplot_theme()
 
 set.seed(321321)
 
@@ -36,14 +32,16 @@ max(abs(c(params0_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE
 max(abs(params0_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
 
 ## Initialize EM at incorrect parameter values (more difficult)
-params1_hat <- get_expectation_maximization_estimates(panel, params1, max_iter=20, epsilon=0.001)
+params1_hat <- get_expectation_maximization_estimates(panel, params1, max_iter=30, epsilon=0.001)
 
+plot(params1_hat$loglik)
 max(abs(c(params1_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
 max(abs(params1_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
 
 ## Initialize EM at "very" incorrect parameter values (even more difficult)
-params2_hat <- get_expectation_maximization_estimates(panel, params2, max_iter=20, epsilon=0.001)
+params2_hat <- get_expectation_maximization_estimates(panel, params2, max_iter=30, epsilon=0.001)
 
+plot(params2_hat$loglik)
 max(abs(c(params2_hat$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
 max(abs(params2_hat$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
 
@@ -88,7 +86,7 @@ M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
 ## Compute inverses once and cache the results, to be re-used by solnp when estimating parameters
 M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
 
-## Compute the joint distribution of (Y_{t+1}, Y_{t}) conditional on Y_{t+2}
+## Compute the joint distribution of (Y_{t+2}, Y_{t+1}, Y_{t})
 M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
     lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
         return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
@@ -194,3 +192,70 @@ min_dist_params2_hat_population$mu - params0$mu
 
 ## TODO Make sure this also works for time homogeneous MD code
 ## (i.e. recover true parameters when using population values of M matrices)
+
+## Now introduce missing observations (Y missing completely at random)
+pr_missing_data <- 0.1
+panel_mcar <- lapply(panel, function(panel_element) {
+    panel_element_mcar <- list(time=panel_element$time,
+                               point_id=panel_element$point_id,
+                               x=panel_element$x)
+    mask <- runif(length(panel_element$y))
+    panel_element_mcar$y <- ifelse(mask < pr_missing_data, NA, panel_element$y)
+    return(panel_element_mcar)
+})
+
+## Make sure EM/ML still works well with missing Ys
+params0_hat_mcar <- get_expectation_maximization_estimates(panel_mcar, params0, max_iter=20, epsilon=0.001)
+
+max(abs(c(params0_hat_mcar$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
+max(abs(params0_hat_mcar$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
+
+params2_hat_mcar <- get_expectation_maximization_estimates(panel_mcar, params2, max_iter=30, epsilon=0.001)
+
+max(abs(c(params2_hat_mcar$P_list, recursive=TRUE) - c(params0$P_list, recursive=TRUE)))  # Largest error in time-varying transition probabilities
+max(abs(params2_hat_mcar$pr_y - params0$pr_y))  # Largest error in observation probabilities (aka misclassification probabilities)
+
+## Now run min dist with missing Ys
+dtable_mcar <- rbindlist(Map(data.frame, panel_mcar))
+setkey(dtable_mcar, point_id)
+stopifnot(all(c("point_id", "time", "x", "y") %in% names(dtable_mcar)))
+table(dtable_mcar$time)  # Periods 1 through length(params0$P_list)+1
+
+dtable_mcar[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
+dtable_mcar[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
+head(dtable_mcar[, c("point_id", "time", "y", "y_one_period_ahead", "y_two_periods_ahead"), with=FALSE], 25)  # Sanity check
+
+mean(is.na(dtable_mcar$y))  # This should be close to pr_missing_data
+
+## Compute the joint distribution of (Y_{t+1}, Y_{t}) for each time period t
+## Note that sum(M_Y_joint_hat_list_mcar[[1]]) and sum(M_Y_joint_hat_list[[1]]) are both 1
+## prop.table(table(...)) appears to handle missing values for us (TODO Confirm!)
+M_Y_joint_hat_list_mcar <- lapply(seq_len(max(dtable_mcar$time) - 1), function(fixed_t) {
+    with(subset(dtable_mcar, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
+})
+
+## Compute inverses once and cache the results, to be re-used by solnp when estimating parameters
+M_Y_joint_hat_inverse_list_mcar <- lapply(M_Y_joint_hat_list_mcar, solve)
+
+sum(c(M_fixed_y_Y_joint_hat_list, recursive=TRUE))  # Sum is 2.0 (because we are summing over 2 values of fixed_t)
+sum(c(M_fixed_y_Y_joint_hat_list[[1]][[1]], recursive=TRUE)) + sum(c(M_fixed_y_Y_joint_hat_list[[2]][[1]], recursive=TRUE))  # Sum is 1.0
+
+## Compute the joint distribution of (Y_{t+2}, Y_{t+1}, Y_{t})
+## Note that this needs to be adjusted for MCAR relative to the simpler case when Y is never missing
+M_fixed_y_Y_joint_hat_list_mcar <- lapply(seq_len(params0$n_components), function(fixed_y) {
+    lapply(seq_len(max(dtable_mcar$time) - 2), function(fixed_t) {
+        return(with(subset(dtable_mcar, time == fixed_t & y_two_periods_ahead == fixed_y),
+                    table(y_one_period_ahead, y)) / sum(dtable_mcar$time == fixed_t &
+                                                        !is.na(dtable_mcar$y_two_periods_ahead) &
+                                                        !is.na(dtable_mcar$y_one_period_ahead) &
+                                                        !is.na(dtable_mcar$y)))
+    })
+})
+
+sum(c(M_fixed_y_Y_joint_hat_list_mcar, recursive=TRUE))  # Sum is 2.0 (because we are summing over 2 values of fixed_t)
+
+min_dist_params2_hat_mcar <- get_min_distance_estimates(params2, M_Y_joint_hat_list_mcar, M_Y_joint_hat_inverse_list_mcar, M_fixed_y_Y_joint_hat_list_mcar, dtable_mcar)
+
+max(abs(params0$pr_y - min_dist_params2_hat_mcar$pr_y))
+max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params2_hat_mcar$P_list, recursive=TRUE)))
+max(abs(params0$mu - min_dist_params2_hat_mcar$mu))
