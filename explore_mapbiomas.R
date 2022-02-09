@@ -7,13 +7,17 @@ library(raster)
 source("src/hmm_functions.R")
 mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 
-opt_list <- list(make_option("--row", default=89800, type="integer"),
-                 make_option("--col", default=24400, type="integer"),
-                 make_option("--width_in_pixels", default=500, type="integer"),
+opt_list <- list(make_option("--row", default=50000, type="integer"),
+                 make_option("--col", default=51000, type="integer"),
+                 make_option("--width_in_pixels", default=1000, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
                  make_option("--class_frequency_cutoff", default=0.005, type="double"),
-                 make_option("--n_random_starts", default=3, type="integer"),
-                 make_option("--grassland_as_forest", default=FALSE, action="store_true"))
+                 make_option("--n_random_starts_em", default=2, type="integer"),
+                 make_option("--n_random_starts_md", default=1, type="integer"),
+                 make_option("--grassland_as_forest", default=FALSE, action="store_true"),
+                 make_option("--combine_other_non_forest", default=FALSE, action="store_true"),
+                 make_option("--skip_ml_if_md_is_diag_dominant", default=FALSE, action="store_true"),
+                 make_option("--use_md_as_initial_values_for_em", default=FALSE, action="store_true"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
@@ -49,7 +53,6 @@ if(pr_missing > 0.9 || pr_water_or_sand > 0.5) {
     quit()
 }
 
-
 n_years <- ncol(window)
 for(time_index in seq_len(n_years)) {
     pr_missing <- mean(is.na(window[, time_index]))
@@ -61,23 +64,29 @@ for(time_index in seq_len(n_years)) {
     }
 }
 
-## Examine class 33 (rivers, lakes, ocean)
-## In how many years are pixels classified as class 33?
-table(rowSums(window == 33, na.rm=TRUE))
-## Examine a pixel that switches between class 33 and other classes
-window[which(!rowSums(window == 33, na.rm=TRUE) %in% c(0, ncol(window)))[1], ]
+fraction_missing_in_all_years <- mean(rowMeans(is.na(window)) == 1.0)
+count_missing_in_all_years <- sum(rowMeans(is.na(window)) == 1.0)
+message("Fraction of pixels missing in 100% of years in the original data: ", fraction_missing_in_all_years)
+
+## When constructing our panel (for estimation), we will only consider pixels that contain at least one non-missing observation
+## in the original data. This will remove pixels in the ocean and pixels outside of the Atlantic forest region
+valid_pixel_index <- rowMeans(is.na(window)) < 1.0
 
 ## Combine classes
 ## Class 12 (grassland) is optionally combined with class 3 (forest)
-if (opt$grassland_as_forest) window[window %in% 12] <- 21
+if(opt$grassland_as_forest) window[window %in% 12] <- 3
 
 ## Combine classes
-## Class 9 (forest plantation) is combined with class 3 (forest)
-window[window == 9] <- 3
+## Classes 4 (savanna formation) and 9 (forest plantation) are combined with class 3 (forest)
+window[window %in% c(4, 9)] <- 3
 
 ## Combine classes
-## Class 11 (wetlands) and class 22 (sand) are combined with class 33 (rivers and lakes)
-window[window %in% c(11, 22)] <- 33
+## Class 11 (wetlands), class 22 (sand), and class 29 (rocky outcrop) are combined with class 33 (rivers and lakes)
+window[window %in% c(11, 22, 29)] <- 33
+
+## Combine classes
+## Class 13 (other non-forest) is combined with class 33 (already a combination of wetlands, sand, rivers and lakes)
+if(opt$combine_other_non_forest) window[window %in% 13] <- 33
 
 ## See https://mapbiomas-br-site.s3.amazonaws.com/downloads/Colecction%206/Cod_Class_legenda_Col6_MapBiomas_BR.pdf
 unique_mapbiomas_classes <- sort(unique(c(window, recursive=TRUE)))
@@ -131,16 +140,22 @@ mean(rowMeans(is.na(window_recoded)) > 0)
 message("Fraction of pixels missing in >50% of years in the recoded data:")
 mean(rowMeans(is.na(window_recoded)) > .5)
 message("Fraction of pixels missing in 100% of years in the recoded data:")
-mean(rowMeans(is.na(window_recoded)) == 1.0)  # TODO Remove these pixels (but first, count how many of them there are)
+mean(rowMeans(is.na(window_recoded)) == 1.0)
 
 full_panel <- apply(window_recoded, 1, function(y) list(y=as.vector(y), time=seq_along(y)))
 
-panel <- sample(full_panel, size=length(full_panel) * opt$subsample, replace=FALSE)
+## Using prob=valid_pixel_index excludes pixels that have 100% missing observations in the original data
+panel <- sample(full_panel, size=length(full_panel) * opt$subsample, replace=FALSE, prob=valid_pixel_index)
+
+## We no longer need the full window at this point, rm it to save memory
+rm(window)
+rm(full_panel)
+gc()
 
 ## These aren't actually used in optimization,
 ## they're just used to create other parameters of the same shape/dimension/time horizon
 n_states <- length(mapbiomas_classes_to_keep)
-n_time_periods <- ncol(window)
+n_time_periods <- ncol(window_recoded)
 dummy_pr_transition <- 0.2 * matrix(1/n_states, nrow=n_states, ncol=n_states) + 0.8 * diag(n_states)
 dummy_pr_y <- 0.2 * matrix(1/n_states, n_states, n_states) + 0.8 * diag(n_states)
 dummy_params <- list(mu=rep(1/n_states, n_states),
@@ -150,9 +165,12 @@ dummy_params <- list(mu=rep(1/n_states, n_states),
 
 estimates <- get_em_and_min_dist_estimates_random_initialization(params=dummy_params,
                                                                  panel=panel,
-                                                                 n_random_starts=opt$n_random_starts,
-                                                                 diag_min=0.7,
-                                                                 diag_max=0.9)
+                                                                 n_random_starts_em=opt$n_random_starts_em,
+                                                                 n_random_starts_md=opt$n_random_starts_md,
+                                                                 diag_min=0.8,
+                                                                 diag_max=0.95,
+                                                                 skip_ml_if_md_is_diag_dominant=opt$skip_ml_if_md_is_diag_dominant,
+                                                                 use_md_as_initial_values_for_em=opt$use_md_as_initial_values_for_em)
 
 estimates$P_hat_frequency <- lapply(estimates$M_Y_joint_hat, get_transition_probs_from_M_S_joint)
 
@@ -164,9 +182,16 @@ estimates$class_frequencies_before_combining <- class_frequencies_before_combini
 estimates$options <- opt
 estimates$window_bbox <- as.data.frame(bbox(window_extent))
 
-filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes_%s.rds",
+estimates$fraction_missing_in_all_years <- fraction_missing_in_all_years
+estimates$count_missing_in_all_years <- count_missing_in_all_years
+
+filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s%s%s.rds",
                     opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample,
-                    ifelse(opt$grassland_as_forest, "grassland_as_forest", ""))
+                    ifelse(opt$grassland_as_forest, "_grassland_as_forest", ""),
+                    ifelse(opt$combine_other_non_forest, "_combine_other_non_forest", ""),
+                    ifelse(opt$skip_ml_if_md_is_diag_dominant, "_skip_ml_if_md_is_diag_dominant", ""),
+                    ifelse(opt$use_md_as_initial_values_for_em, "_use_md_as_initial_values_for_em", ""))
+message("Saving ", filename)
 saveRDS(estimates, file=filename)
 
 for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
@@ -175,7 +200,12 @@ for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
     ## Diagonals of the transition matrix (for example, Pr[ forest at t+1 | forest at t ])
     P_hat_frequency <- sapply(estimates$P_hat_frequency, function(P) P[class_index, class_index])
     P_hat_md <- sapply(estimates$min_dist_params_hat_best_objfn$P_list, function(P) P[class_index, class_index])
-    P_hat_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list, function(P) P[class_index, class_index])
+
+    if("em_params_hat_best_likelihood" %in% names(estimates)) {
+        P_hat_ml <- sapply(estimates$em_params_hat_best_likelihood$P_list, function(P) P[class_index, class_index])
+    } else {
+        P_hat_ml <- rep(NA, length(P_hat_md))
+    }
 
     df <- data.table(time_index=seq_along(P_hat_frequency), P_hat_frequency=P_hat_frequency, P_hat_md, P_hat_ml)
     df_melted <- melt(df, id.vars="time_index")
@@ -190,6 +220,6 @@ for(class_index in seq_along(estimates$mapbiomas_classes_to_keep)) {
           ylab("probability") +
           theme_bw())
     filename <- sprintf("transition_matrix_diagonals_window_%s_%s_width_%s_class_%s_with_combined_classes_%s.png",
-                        opt$row, opt$col, opt$width_in_pixels, class,  ifelse(opt$grassland_as_forest,'grassland_as_forest',''))
+                        opt$row, opt$col, opt$width_in_pixels, class, ifelse(opt$grassland_as_forest, "grassland_as_forest", ""))
     ggsave(p, filename=filename, width=6, height=4, units="in")
 }

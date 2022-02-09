@@ -1,18 +1,3 @@
 #!/bin/bash
 
-echo "Starting first group with grassland as forest"
-
-for rowVal in {501..90001..500}
-do
-    echo "Row Val = $rowVal"
-    parallel --jobs 8  "Rscript explore_mapbiomas.R --row $rowVal --col {} --grassland_as_forest --subsample 0.02" ::: {1..80001..500}
-done
-
-
-
-# echo "Starting first group with separate grassland"
-# for colVal in {23000..27000..500}
-# do
-#     Rscript explore_mapbiomas.R --row 90000 --col $colVal --subsample 0.05 &
-# done
-# wait
+parallel --jobs 12  "Rscript explore_mapbiomas.R --row {1} --col {2} --grassland_as_forest --combine_other_non_forest --subsample 0.01 --use_md_as_initial_values_for_em --n_random_starts_md 1 &> log_{1}_{2}_use_md_as_initial_values_for_em.txt" ::: {50001..60001..1000} ::: {1..80001..1000}
