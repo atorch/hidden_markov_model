@@ -18,10 +18,10 @@ cd /home/hidden_markov_model/src/
 Rscript simulation_simple.R
 ```
 
-The code in `simulation_simple.R` runs simple simulations that are used to confirm
-that the code is working correctly. Its output is not used in the paper.
+The code in [simulation_simple.R](src/simulation_simple.R) runs simple simulations that are used to
+confirm that the estimation functions are working correctly. Its output is not used in the paper.
 
-To reproduce the baseline results in section `D.2 Baseline Results`, run
+To reproduce section `D.2 Baseline Results`, run
 ```bash
 Rscript simulation_baseline.R
 ```
