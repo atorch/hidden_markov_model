@@ -1,12 +1,18 @@
 rm(list = ls())
 library(data.table)
-library(stargazer)
+library(optparse)
 library(parallel)
 source("hmm_functions.R")
 
+## TODO There's a second R script that runs after this one, make sure it works, rename it, put it in readme
+
+opt_list <- list(make_option("--n_simulations", default=100, type="integer"))
+opt <- parse_args(OptionParser(option_list=opt_list))
+
+message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
 simulation_df <- data.frame(n_points=c(100, 500, rep(1000, 13), 10000),
-                            n_replications=c(rep(100, 16)),
+                            n_simulations=opt$n_simulations,
                             n_time_periods=c(rep(4, 10), 5, 6, rep(4,3), 4),
                             n_components = c(rep(2, 16)),
                             mu1 = c(rep(90, 16)), ## Put in as percent
@@ -16,10 +22,8 @@ simulation_df <- data.frame(n_points=c(100, 500, rep(1000, 13), 10000),
                             prY11 = c(rep(90, 12), 75, 80, 95, 90), ## Correct classification Probability 1,1 in matrix
                             prY22 = c(rep(80, 16))) ## Correct classification Probability 2,2 in matrix
 
-
 max_cores <- 4
 set.seed(998877)
-
 
 ## Set output files for simulation
 county_outfile_format <- paste0("county_simulation_", Sys.time(), "_iter_%s.rds")
@@ -83,7 +87,7 @@ cluster <- makeCluster(num_cores)  # Call stopCluster when done
 
 for (i in seq_len(nrow(simulation_df))) {
 
-    n_replications <- simulation_df$n_replications[i]
+    n_simulations <- simulation_df$n_simulations[i]
     n_points <- simulation_df$n_points[i]
     n_time_periods <- simulation_df$n_time_periods[i]
     n_components <- simulation_df$n_components[i]
@@ -94,7 +98,7 @@ for (i in seq_len(nrow(simulation_df))) {
                               rep(simulation_df$defRtMid[i]/100, n_time_periods-3),
                               simulation_df$defRtLast[i]/100)
 
-    message("Running simulation with n_replications=", n_replications, " n_points=", n_points, " n_time_periods=", n_time_periods)
+    message("Running simulation with n_simulations=", n_simulations, " n_points=", n_points, " n_time_periods=", n_time_periods)
 
     ## Note: only some of these objects change on every loop (e.g. n_points), others are constant
     clusterExport(cluster, c("baum_welch",
@@ -121,7 +125,7 @@ for (i in seq_len(nrow(simulation_df))) {
                              "valid_panel_element",
                              "valid_parameters"))
     
-    counties <- parLapply(cluster, seq_len(n_replications), function(n) {
+    counties <- parLapply(cluster, seq_len(n_simulations), function(n) {
         simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points=n_points,
                                n_components = n_components,mu1 = mu1, prY11 = prY11, prY22 = prY22,
                                deforestation_rates = deforestation_rates)
