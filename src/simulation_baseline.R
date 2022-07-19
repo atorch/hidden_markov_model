@@ -26,12 +26,11 @@ max_cores <- 4
 set.seed(998877)
 
 ## Set output files for simulation
-county_outfile_format <- paste0("county_simulation_", Sys.time(), "_iter_%s.rds")
+outfile_format <- paste0("baseline_simulation_", Sys.time(), "_iter_%s.rds")
 
 ## Output simulation parameters
-iter_desc_outfile <- paste0("county_simulation_", Sys.time(), "_Desc.csv")
-fwrite(simulation_df,file = iter_desc_outfile)
-
+iter_desc_outfile <- paste0("baseline_simulation_", Sys.time(), "_Desc.csv")
+fwrite(simulation_df, file=iter_desc_outfile)
 
 get_P_list <- function(deforestation_rates) {
 
@@ -50,33 +49,31 @@ get_P_list <- function(deforestation_rates) {
 
 
 
-simulate_single_county <- function(county_id, n_time_periods, n_points,n_components, mu1, prY11,prY22, deforestation_rates) {
+run_single_simulation <- function(county_id, n_time_periods, n_points,n_components, mu1, prY11,prY22, deforestation_rates) {
 
     message(" simulating county_id ", county_id)
 
-
-    ## Note: for now, every county has the same initial distribution over hidden states (mu)
-    county_params <- list(n_components=n_components,
-                          mu=c(mu1, 1-mu1))
+    params <- list(n_components=n_components,
+                   mu=c(mu1, 1-mu1))
 
     ## Observation probabilities (rows are hidden states, columns are Y)
     ## Note: for now, every county has the same misclassification probabilities
     ## Note that this is the transpose of upsilon in the paper.
-    pr_y <- rbind(c(prY11, 1-prY11),
-                  c(1-prY22, prY22))
+    pr_y <- rbind(c(prY11, 1 - prY11),
+                  c(1 - prY22, prY22))
 
     P_list <- get_P_list(deforestation_rates)
 
-    county_params$P_list <- P_list
-    county_params$pr_y <- pr_y
+    params$P_list <- P_list
+    params$pr_y <- pr_y
 
-    county_simulation <- replicate(n_points, simulate_hmm(county_params), simplify=FALSE)
+    county_simulation <- replicate(n_points, simulate_hmm(params), simplify=FALSE)
 
-    estimates <- get_em_and_min_dist_estimates_random_initialization(params=county_params, panel=county_simulation)
+    estimates <- get_em_and_min_dist_estimates_random_initialization(params=params, panel=county_simulation)
 
     return(list(simulation=county_simulation,
                 estimates=estimates,
-                params=county_params,
+                params=params,
                 deforestation_rates=deforestation_rates,
                 id=county_id))
 }
@@ -121,19 +118,19 @@ for (i in seq_len(nrow(simulation_df))) {
                              "objfn_minimum_distance",
                              "simulate_discrete_markov",
                              "simulate_hmm",
-                             "simulate_single_county",
+                             "run_single_simulation",
                              "valid_panel_element",
                              "valid_parameters"))
     
-    counties <- parLapply(cluster, seq_len(n_simulations), function(n) {
-        simulate_single_county(county_id=n, n_time_periods=n_time_periods, n_points=n_points,
-                               n_components = n_components,mu1 = mu1, prY11 = prY11, prY22 = prY22,
-                               deforestation_rates = deforestation_rates)
+    simulations <- parLapply(cluster, seq_len(n_simulations), function(n) {
+        run_single_simulation(county_id=n, n_time_periods=n_time_periods, n_points=n_points,
+                              n_components = n_components,mu1 = mu1, prY11 = prY11, prY22 = prY22,
+                              deforestation_rates = deforestation_rates)
     })
 
-    county_outfile <- sprintf(county_outfile_format, i)
-    message("Saving ", county_outfile)
-    saveRDS(counties, file = county_outfile)
+    outfile <- sprintf(outfile_format, i)
+    message("Saving ", outfile)
+    saveRDS(simulations, file=outfile)
 }
 
 stopCluster(cluster)
