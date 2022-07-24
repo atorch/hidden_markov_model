@@ -198,7 +198,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                     }
                 }
 
-                simulations_filename <- sprintf("spatial_corr_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.rds",
+                simulations_filename <- sprintf("output/spatial_corr_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.rds",
                                                 params0$n_fields,
                                                 pr_missing_data,
                                                 include_z_in_simulation,
@@ -259,7 +259,8 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       theme(plot.title = element_text(hjust = 0.5)) +
                       facet_wrap(~ pr_y_label) +
                       geom_hline(aes(yintercept=true_transition), linetype="dashed"))
-                filename <- sprintf("simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+
+                filename <- sprintf("output/simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     "estimated_pr_y",
                                     params0$n_fields,
                                     pr_missing_data,
@@ -309,8 +310,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       theme(plot.title = element_text(hjust = 0.5)) +
                       ylim(c(0, 0.65)) +                      
                       facet_grid(state_label ~ time_label))
-                p
-                filename <- sprintf("simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("output/simulation_spatial_corr_%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     "estimated_transition_probabilities",
                                     params0$n_fields,
                                     pr_missing_data,
@@ -336,7 +336,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
 
-                filename <- sprintf("%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("output/%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     "simulation_spatial_corr_true_field_state",
                                     params0$n_fields,
                                     pr_missing_data,
@@ -356,7 +356,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
 
-                filename <- sprintf("%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("output/%s_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     "simulation_spatial_corr_classification_errors",
                                     params0$n_fields,
                                     pr_missing_data,
@@ -373,7 +373,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
 
-                filename <- sprintf("simulation_spatial_corr_z_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("output/simulation_spatial_corr_z_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     params0$n_fields,
                                     pr_missing_data,
                                     include_z_in_simulation,
@@ -389,7 +389,7 @@ for(pr_missing_data in c(0.0, 0.1)) {
                       xlab("pixel coordinate (easting)") +
                       ylab("pixel coordinate (northing)"))
 
-                filename <- sprintf("simulation_spatial_corr_observed_y_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
+                filename <- sprintf("output/simulation_spatial_corr_observed_y_n_fields_%s_pr_missing_data_%s_include_z_%s%s_ising_beta_%s_%s_simulations.png",
                                     params0$n_fields,
                                     pr_missing_data,
                                     include_z_in_simulation,
@@ -401,4 +401,3 @@ for(pr_missing_data in c(0.0, 0.1)) {
         }
     }
 }
-

@@ -190,9 +190,6 @@ max(abs(c(min_dist_params2_hat_population$P_list, recursive=TRUE) - c(params0$P_
 ## Recover the initial distribution
 min_dist_params2_hat_population$mu - params0$mu
 
-## TODO Make sure this also works for time homogeneous MD code
-## (i.e. recover true parameters when using population values of M matrices)
-
 ## Now introduce missing observations (Y missing completely at random)
 pr_missing_data <- 0.1
 panel_mcar <- lapply(panel, function(panel_element) {
@@ -254,7 +251,11 @@ M_fixed_y_Y_joint_hat_list_mcar <- lapply(seq_len(params0$n_components), functio
 
 sum(c(M_fixed_y_Y_joint_hat_list_mcar, recursive=TRUE))  # Sum is 2.0 (because we are summing over 2 values of fixed_t)
 
-min_dist_params2_hat_mcar <- get_min_distance_estimates(params2, M_Y_joint_hat_list_mcar, M_Y_joint_hat_inverse_list_mcar, M_fixed_y_Y_joint_hat_list_mcar, dtable_mcar)
+min_dist_params2_hat_mcar <- get_min_distance_estimates(params2,
+                                                        M_Y_joint_hat_list_mcar,
+                                                        M_Y_joint_hat_inverse_list_mcar,
+                                                        M_fixed_y_Y_joint_hat_list_mcar,
+                                                        dtable_mcar)
 
 max(abs(params0$pr_y - min_dist_params2_hat_mcar$pr_y))
 max(abs(c(params0$P_list, recursive=TRUE) - c(min_dist_params2_hat_mcar$P_list, recursive=TRUE)))
