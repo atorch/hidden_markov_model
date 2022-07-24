@@ -1,7 +1,6 @@
 library(data.table)
 library(stargazer)
 library(ggplot2)
-library(viridis)
 library(stringr)
 
 source("hmm_functions.R")

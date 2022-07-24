@@ -15,12 +15,20 @@ We run our code in a Docker container so that our environment is reproducible.
 Start by [cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository), [installing Docker](https://docs.docker.com/engine/install/), and then run these commands:
 ```bash
 sudo docker build -f ~/hidden_markov_model/Dockerfile ~/hidden_markov_model --tag=hidden_markov_model
+```
+
+The `build` command above will use the [Dockerfile](Dockerfile) to create an image with R version 4.2.1 and several R packages installed.
+We can now use that image to run scripts:
+
+```bash
 sudo docker run -it -v ~/hidden_markov_model:/home/hidden_markov_model hidden_markov_model bash
 Rscript simulation_simple.R
 ```
 
 The code in [simulation_simple.R](simulation_simple.R) runs simple simulations that are used to
 confirm that the estimation functions are working correctly. Its output is not used in the paper.
+
+All R scripts should be run inside the container, i.e. following the `docker run` command as above.
 
 To reproduce section `D.2 Baseline Results`, run
 ```bash
