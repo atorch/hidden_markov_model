@@ -66,8 +66,6 @@ get_data_table_summarizing_single_simulation <- function(sim) {
 simulation_params <- fread(sprintf("output/county_simulation_%s_Desc.csv", simulation_date))
 simulation_params$iter <- seq_len(nrow(simulation_params))
 
-## TODO sims[[i]] is a list of 100 simulations
-## TODO Explain list of lists structure
 sim_dts <- lapply(seq_len(nrow(simulation_params)), function(iter) {
     # TODO Change "county" to "baseline"
     sim <- readRDS(sprintf("output/county_simulation_%s_iter_%s.rds", simulation_date, iter))
@@ -222,68 +220,3 @@ plt <- (ggplot(dt_melt[ defRtLast==20& n_points_per_county == 1000 & n_time_peri
         facet_grid(paste0('P[list(',time,')]')~., label = label_parsed)+
         theme_bw())
 ggsave('output/deforestation_probability_different_misclassification_rate.png', width = 6, height = 4, units = 'in')
-
-mseFunc <- function(trueVal, keyword){
-    prDat <- dt_melt[variable %like% keyword,
-                     list(rmse = sqrt(mean((value - get(trueVal))^2)),
-                          bias = mean(value - get(trueVal)),
-                          sd = sd(value),
-                          N = .N),
-                     by = list(variable,fileID,simID,time)]
-    return(prDat)
-}
-
-## TODO Get this from sort(unique(simulation_params$n_points_per_county)) ?
-nVec <- c(100, 500, 1000, 10000)
-
-colsT <- iterDat[n_points_per_county %in% nVec & n_counties == 100  & mu1==90 & defRt1==4&defRtMid==10 & defRtLast==20 & prY11==90 & prY22==80 & n_points_per_county == 1000]
-colsMrgT <- colsT[,list(simID,fileID,nPts = n_points_per_county)]
-
-defForestPrDatT <- merge(mseFunc('true_deforestation_probability','deforestation_probability'),colsMrgT)
-miscPr1DatT <- merge(mseFunc('true_misclassification_probability_1','misclassification_probability_1'),colsMrgT)
-
-
-cols <- iterDat[n_points_per_county %in% nVec & n_counties == 100 & n_time_periods==4 & mu1==90 & defRt1==4&defRtMid==10 & defRtLast==20 & prY11==90 & prY22==80]
-colsMrg <- cols[,list(simID,fileID,nPts = n_points_per_county)]
-
-
-defForestPrDat <- merge(mseFunc('true_deforestation_probability','deforestation_probability'),colsMrg)
-reForestPrDat <- merge(mseFunc('true_reforestation_probability','reforestation_probability'),colsMrg)
-miscPr1Dat <- merge(mseFunc('true_misclassification_probability_1','misclassification_probability_1'),colsMrg)
-miscPr2Dat <- merge(mseFunc('true_misclassification_probability_2','misclassification_probability_2'), colsMrg)
-muPrDat <- merge(mseFunc('true_mu1','mu1'), colsMrg)
-
-
-
-outFunc <- function(dat,nPtVar,varTyp,errTyp,ti=1){
-    a <- dat[variable %like% varTyp  & time==ti & nPts == nPtVar,sprintf('%.3f',get(errTyp))]
-    if (length(a) ==0){
-        return('')
-    }else{
-        return(paste0(a))
-    }
-}
-
-##Make output table 
-matVec <- c('muPrDat','miscPr1Dat','miscPr2Dat',rep(c('defForestPrDat','reForestPrDat'),3))
-tVec <- c(1,1,1,1,1,2,2,3,3)
-nmVec <- c('P_{S_{1}}=.9','\\Upsilon(2,1)=.1','\\Upsilon(1,2)=.2','P_{1}(1,2)=.04','P_{1}(2,1)=.02','P_{2}(1,2)=.1','P_{2}(2,1)=.02','P_{3}(1,2)=.2','P_{3}(2,1)=.02')
-
-sink('mcTable.tex')
-cat('\\begin{tabular}{rr@{\\hskip .3in}ccc@{\\hskip .4in}ccc@{\\hskip .4in}ccc}\n')
-cat('\\hline\n')
-cat('& & ',paste0('\\multicolumn{3}{c}{N=',nVec,'}',collapse='&'),'\\\\\n')
-cat('\\hline\n')
-cat('&  ',rep('&Freq & MD & EM',3),'\\\\\n')
-cat('\\hline\n')
-for(j in 1:length(matVec)){
-    cat('&Bias &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-                                                                           function(e) outFunc(get(matVec[j]),n,e,'bias',tVec[j])),collapse='&')),collapse='&'),'\\\\\n')
-    cat('$',nmVec[j],'$& s.d. &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-                                                                                          function(e) outFunc(get(matVec[j]),n,e,'sd',tVec[j])),collapse='&')),collapse='&'),'\\\\\n')
-    cat('&RMSE &', paste0(sapply(c(100,500,1000),function(n) paste0(sapply(c('naive','md','em'),
-                                                                           function(e) outFunc(get(matVec[j]),n,e,'rmse',tVec[j])),collapse='&')),collapse='&'),'\\\\\n')
-    cat('\\\\\\\\')
-}
-cat('\\end{tabular}')
-sink()
