@@ -12,20 +12,20 @@ by Adrian L. Torchiana, Ted Rosenbaum, Paul T. Scott, and Eduardo Souza-Rodrigue
 ## R Simulations
 
 We run our code in a Docker container so that our environment is reproducible.
-Start by [installing Docker](https://docs.docker.com/engine/install/), and then run these commands:
+Start by [cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository), [installing Docker](https://docs.docker.com/engine/install/), and then run these commands:
 ```bash
 sudo docker build -f ~/hidden_markov_model/Dockerfile ~/hidden_markov_model --tag=hidden_markov_model
 sudo docker run -it -v ~/hidden_markov_model:/home/hidden_markov_model hidden_markov_model bash
-cd /home/hidden_markov_model/src/
 Rscript simulation_simple.R
 ```
 
-The code in [simulation_simple.R](src/simulation_simple.R) runs simple simulations that are used to
+The code in [simulation_simple.R](simulation_simple.R) runs simple simulations that are used to
 confirm that the estimation functions are working correctly. Its output is not used in the paper.
 
 To reproduce section `D.2 Baseline Results`, run
 ```bash
 Rscript simulation_baseline.R --n_simulations 100
+Rscript describe_simulation_baseline.R
 ```
 
 To reproduce section `D.4 Spatial Dependence and Serial Correlation`, run
@@ -33,3 +33,5 @@ To reproduce section `D.4 Spatial Dependence and Serial Correlation`, run
 Rscript simulation_spatial_corr.R --n_simulations 100
 Rscript simulation_spatial_corr.R --n_simulations 100 --z_constant_over_time
 ```
+
+These scripts will save output files to the [output](output) directory.

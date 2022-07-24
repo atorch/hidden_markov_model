@@ -6,6 +6,7 @@ source("hmm_functions.R")
 
 ## TODO There's a second R script that runs after this one, make sure it works, rename it, put it in readme
 
+## TODO Distinguish n_simulations, number of replications
 opt_list <- list(make_option("--n_simulations", default=100, type="integer"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 
@@ -26,10 +27,10 @@ max_cores <- 4
 set.seed(998877)
 
 ## Set output files for simulation
-outfile_format <- paste0("baseline_simulation_", Sys.time(), "_iter_%s.rds")
+outfile_format <- paste0("output/baseline_simulation_", Sys.Date(), "_iter_%s.rds")
 
 ## Output simulation parameters
-iter_desc_outfile <- paste0("baseline_simulation_", Sys.time(), "_Desc.csv")
+iter_desc_outfile <- paste0("output/baseline_simulation_", Sys.Date(), "_Desc.csv")
 fwrite(simulation_df, file=iter_desc_outfile)
 
 get_P_list <- function(deforestation_rates) {
