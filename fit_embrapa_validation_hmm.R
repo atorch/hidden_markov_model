@@ -150,7 +150,7 @@ pr_Y_given_S <- with(points_test, prop.table(table(validation_landuse_coarse, la
 dtable <- data.table(points_test)
 setkey(dtable, point_id, year)
 dtable[, validation_landuse_coarse_next := c(tail(as.character(validation_landuse_coarse), .N-1), as.character(NA)), by="point_id"]
-dtable[, landuse_predicted_next := c(tail(as.character(landuse_predicted), .N-1), as.character(NA)), by="point_id"]  # TODO Factor
+dtable[, landuse_predicted_next := c(tail(as.character(landuse_predicted), .N-1), as.character(NA)), by="point_id"]
 dtable[, landuse_predicted_two_periods_ahead := c(tail(as.character(landuse_predicted), .N-2), rep(as.character(NA), 2)), by="point_id"]
 dtable[, landuse_predicted_two_periods_ahead := factor(landuse_predicted_two_periods_ahead, levels=levels(landuse_predicted))]
 head(subset(dtable, select=c("year", "point_id", "validation_landuse_coarse", "validation_landuse_coarse_next")), 30)  # Sanity check
@@ -180,12 +180,7 @@ viterbi_paths <- lapply(panel, viterbi_path_time_homogeneous, params=hmm_params_
 dtable$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recursive=TRUE)]
 viterbi_test_confusion <- table(dtable$validation_landuse_coarse, dtable$viterbi_landuse)  # Compare to gbm_test_confusion
 
-## TODO Include (viterbi_test_confusion - gbm_test_confusion) in the validation section?
-## HMM improves classification accuracy "for free"! We get more mass on the diagonal of the confusion matrix
-## TODO Include improvement in accuracy from using viterbi in boostrap?
-
 ## Run MD with time-homogeneous parameters
-## TODO Make this function also return EM estimates, move code into hmm_functions.R
 estimates_time_homogeneous <- get_minimum_distance_estimates_random_initialization_time_homogeneous(initial_hmm_params[[1]], panel)
 
 estimates_time_homogeneous$min_dist_params_hat_best_objfn
@@ -258,7 +253,6 @@ run_bootstrap <- function() {
     md_params_hat_time_varying <- estimates_time_varying$min_dist_params_hat_best_objfn
 
     ## Run Viterbi and see whether test performance beats raw GBM
-    ## TODO Both EM and MD
     viterbi_paths_time_varying <- lapply(panel_boot, viterbi_path, params=hmm_params_hat_time_varying)
     dtable_boot$viterbi_landuse_time_varying <- levels(dtable$landuse_predicted)[c(viterbi_paths_time_varying, recursive=TRUE)]
 
@@ -269,7 +263,6 @@ run_bootstrap <- function() {
     viterbi_accuracy_time_varying <- mean(dtable_boot$viterbi_landuse_time_varying == dtable_boot$validation_landuse_coarse, na.rm=TRUE)
     viterbi_accuracy <- mean(dtable_boot$viterbi_landuse == dtable_boot$validation_landuse_coarse, na.rm=TRUE)
 
-    ## TODO May need to adjust this dataframe to make the Classification Accuracy plot easier to read
     df_classification_accuracy <- data.frame("variable"="Classification Accuracy",
                                              "transition_year"="All Years",
                                              "estimator_type"=c("", "Time Homogeneous", "Time Varying"),
@@ -286,8 +279,6 @@ run_bootstrap <- function() {
     pr_transition_boot_predictions_time_varying <- lapply(transition_years, function(fixed_year) {
         with(subset(dtable_boot, year == fixed_year), prop.table(table(predicted_landuse, predicted_landuse_next), 1))
     })
-
-    ## TODO Run viterbi with time-varying transition probs, record improvement in classification accuracy
 
     df_pr_crops_pasture_errors <- data.frame("variable"="Crops to Pasture",
                                              "transition_year"="All Years",
@@ -466,7 +457,6 @@ boots_summary <- boots[, list("mean_estimated_value"=mean(estimated_value),
                               "sd_estimated_value"=sd(estimated_value)),
                        by=c("variable", "estimator", "estimator_factor", "estimator_type", "transition_year")]
 
-## TODO Cutoff at zero for lower bound?  pmax(0, ...)  Some of the CIs for transition probabilities include negative values
 boots_summary[, lb := mean_estimated_value - 1.96 * sd_estimated_value]
 boots_summary[, ub := mean_estimated_value + 1.96 * sd_estimated_value]
 
