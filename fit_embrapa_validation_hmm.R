@@ -150,7 +150,7 @@ pr_Y_given_S <- with(points_test, prop.table(table(validation_landuse_coarse, la
 dtable <- data.table(points_test)
 setkey(dtable, point_id, year)
 dtable[, validation_landuse_coarse_next := c(tail(as.character(validation_landuse_coarse), .N-1), as.character(NA)), by="point_id"]
-dtable[, landuse_predicted_next := c(tail(as.character(landuse_predicted), .N-1), as.character(NA)), by="point_id"]  # TODO Factor
+dtable[, landuse_predicted_next := c(tail(as.character(landuse_predicted), .N-1), as.character(NA)), by="point_id"]
 dtable[, landuse_predicted_two_periods_ahead := c(tail(as.character(landuse_predicted), .N-2), rep(as.character(NA), 2)), by="point_id"]
 dtable[, landuse_predicted_two_periods_ahead := factor(landuse_predicted_two_periods_ahead, levels=levels(landuse_predicted))]
 head(subset(dtable, select=c("year", "point_id", "validation_landuse_coarse", "validation_landuse_coarse_next")), 30)  # Sanity check
@@ -181,7 +181,6 @@ dtable$viterbi_landuse <- levels(dtable$landuse_predicted)[c(viterbi_paths, recu
 viterbi_test_confusion <- table(dtable$validation_landuse_coarse, dtable$viterbi_landuse)  # Compare to gbm_test_confusion
 
 ## Run MD with time-homogeneous parameters
-## TODO Make this function also return EM estimates, move code into hmm_functions.R
 estimates_time_homogeneous <- get_minimum_distance_estimates_random_initialization_time_homogeneous(initial_hmm_params[[1]], panel)
 
 estimates_time_homogeneous$min_dist_params_hat_best_objfn
@@ -191,7 +190,7 @@ params0 <- initial_hmm_params[[1]]
 params0$P_list <- rep(list(params0$P), length(unique((dtable$year))) - 1)
 params0$P <- NULL
 
-estimates_time_varying <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, panel)
+estimates_time_varying <- get_em_and_min_dist_estimates_random_initialization(params0, panel)
 
 ## Estimated crops->pasture transition probability hits edge (it's zero) in one period, but seems reasonable
 estimates_time_varying$min_dist_params_hat_best_objfn
@@ -250,7 +249,7 @@ run_bootstrap <- function(subsample_size) {
     params0$P_list <- rep(list(params0$P), length(unique((dtable$year))) - 1)
     params0$P <- NULL
 
-    estimates_time_varying <- get_hmm_and_minimum_distance_estimates_random_initialization(params0, panel_boot)
+    estimates_time_varying <- get_em_and_min_dist_estimates_random_initialization(params0, panel_boot)
 
     hmm_params_hat_time_varying <- estimates_time_varying$em_params_hat_best_likelihood
     md_params_hat_time_varying <- estimates_time_varying$min_dist_params_hat_best_objfn
@@ -423,7 +422,7 @@ clusterExport(cluster, c("baum_welch",
                          "eq_function_minimum_distance",
                          "eq_function_min_dist_time_homogeneous",
                          "get_expectation_maximization_estimates",
-                         "get_hmm_and_minimum_distance_estimates_random_initialization",
+                         "get_em_and_min_dist_estimates_random_initialization",
                          "get_min_distance_estimates",
                          "get_min_distance_estimates_time_homogeneous",
                          "get_minimum_distance_estimates_random_initialization_time_homogeneous",
@@ -446,9 +445,9 @@ boots <- rbindlist(boots)
 
 stopCluster(cluster)
 
-boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_replications_%s.rds",
-                          opt$panel_length, opt$n_bootstrap_samples, digest(points_train, algo="crc32"))
-## saveRDS(boots, file=boots_filename)
+boots_filename <- sprintf("validation_bootstrap_%s_panel_%s_replications_%s_%s_points_in_training_set.rds",
+                          opt$panel_length, opt$n_bootstrap_samples, digest(points_train, algo="crc32"), n_point_id_train)
+saveRDS(boots, file=boots_filename)
 
 ## Set levels to control order in which estimators appear in plots
 estimator_levels <- c("Frequency",
@@ -481,9 +480,11 @@ p <- ggplot(boots_summary_accuracy,
     geom_point() +
     geom_errorbarh(height=0) +
     scale_x_continuous('Classification Accuracy') +
-    scale_y_discrete('') +
-    theme_bw()
-ggsave("embrapa_bootstrap_classification_accuracy_confidence_intervals.png", width=8, height=6)
+    theme(axis.title.y=element_blank())
+filename <- sprintf("embrapa_bootstrap_classification_accuracy_confidence_intervals_%s_replications_%s_points_in_training_set.png",
+                    opt$n_bootstrap_samples,
+                    n_point_id_train)
+ggsave(filename, width=8, height=6)
 
 p <- ggplot(boots_summary_P_errors,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
@@ -494,7 +495,10 @@ p <- ggplot(boots_summary_P_errors,
     theme_bw() +
     facet_wrap(~ variable, scales='free_x') +
     geom_vline(xintercept = 0, linetype=2)
-ggsave("embrapa_bootstrap_transition_probability_time_homogeneous_errors_confidence_intervals.png", p, width=8, height=6)
+filename <- sprintf("embrapa_bootstrap_transition_probability_time_homogeneous_errors_confidence_intervals_%s_replications_%s_points_in_training_set.png",
+                    opt$n_bootstrap_samples,
+                    n_point_id_train)
+ggsave(filename, p, width=8, height=6)
 
 p <- ggplot(boots_summary_P,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
@@ -504,7 +508,10 @@ p <- ggplot(boots_summary_P,
     scale_y_discrete('') +
     theme_bw() +
     facet_wrap(~ variable, scales='free_x')
-ggsave("embrapa_bootstrap_transition_probability_time_homogeneous_confidence_intervals.png", p, width=8, height=6)
+filename <- sprintf("embrapa_bootstrap_transition_probability_time_homogeneous_confidence_intervals_%s_replications_%s_points_in_training_set.png",
+                    opt$n_bootstrap_samples,
+                    n_point_id_train)
+ggsave(filename, p, width=8, height=6)
 
 p <- ggplot(boots_summary_P_time_varying_errors,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
@@ -515,7 +522,10 @@ p <- ggplot(boots_summary_P_time_varying_errors,
     theme_bw() +
     facet_grid(transition_year ~ variable, scales='free') +
     geom_vline(xintercept = 0, linetype=2)
-ggsave("embrapa_bootstrap_transition_probability_time_varying_errors_confidence_intervals.png", p, width=8, height=10)
+filename <- sprintf("embrapa_bootstrap_transition_probability_time_varying_errors_confidence_intervals_%s_replications_%s_points_in_training_set.png",
+                    opt$n_bootstrap_samples,
+                    n_point_id_train)
+ggsave(filename, p, width=8, height=10)
 
 p <- ggplot(boots_summary_P_time_varying,
             aes(x = mean_estimated_value, y = estimator_factor, xmin = lb, xmax = ub)) +
@@ -525,7 +535,10 @@ p <- ggplot(boots_summary_P_time_varying,
     scale_y_discrete('') +
     theme_bw() +
     facet_grid(transition_year ~ variable, scales='free')
-ggsave("embrapa_bootstrap_transition_probability_time_varying_confidence_intervals.png", p, width=8, height=10)
+filename <- sprintf("embrapa_bootstrap_transition_probability_time_varying_confidence_intervals_%s_replications_%s_points_in_training_set.png",
+                    opt$n_bootstrap_samples,
+                    n_point_id_train)
+ggsave(filename, p, width=8, height=10)
 
 boots_summary_pr_y <- subset(boots_summary, variable %in% c("Pr[Y = pasture | S = pasture]", "Pr[Y = crops | S = crops]"))
 
@@ -537,7 +550,10 @@ p <- ggplot(boots_summary_pr_y,
     scale_y_discrete('') +
     theme_bw() +
     facet_grid(estimator_type ~ variable, scales='free_x')
-ggsave("embrapa_bootstrap_pr_y_given_s_confidence_intervals.png", p, width=8, height=6)
+filename <- sprintf("embrapa_bootstrap_pr_y_given_s_confidence_intervals_%s_replications_%s_points_in_training_set.png",
+                    opt$n_bootstrap_samples,
+                    n_point_id_train)
+ggsave(filename, p, width=8, height=6)
 
 message("GBM test set confusion matrix:")
 print(gbm_test_confusion)

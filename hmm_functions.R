@@ -8,9 +8,12 @@ get_reforestation_prob_from_P <- function(P) {
     return(P[2, 1])
 }
 
-get_random_initial_parameters <- function(params0) {
+get_random_initial_parameters <- function(params0, diag_min, diag_max) {
 
+    ## TODO Does this function really need params0 as an arg?  Or only params0$n_components and n_time_periods?
     ## Given a true set of HMM parameters, return random incorrect parameters from which to begin parameter estimation
+
+    stopifnot(0.5 < diag_min && diag_min < diag_max && diag_max <= 1)
 
     initial_parameters <- list(n_components=params0$n_components)
 
@@ -20,7 +23,7 @@ get_random_initial_parameters <- function(params0) {
             ## Probabilities on diagonals of the transition probability matrices
             ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
             ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$P_list?
-            random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
+            random_uniform <- runif(params0$n_components, min=diag_min, max=diag_max)
 
             P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
             diag(P) <- random_uniform
@@ -28,7 +31,7 @@ get_random_initial_parameters <- function(params0) {
             return(P)
         })
     } else {
-        random_uniform <- runif(params0$n_components, min=0.60, max=0.98)
+        random_uniform <- runif(params0$n_components, min=diag_min, max=diag_max)
 
         P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$P), ncol=ncol(params0$P))
         diag(P) <- random_uniform
@@ -36,7 +39,7 @@ get_random_initial_parameters <- function(params0) {
     }
 
     ## Probabilities on the diagonals of the observation probability matrix pr_y
-    random_uniform <- runif(params0$n_components, min=0.6, max=0.98)
+    random_uniform <- runif(params0$n_components, min=diag_min, max=diag_max)
     initial_parameters$pr_y <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(params0$pr_y), ncol=ncol(params0$pr_y))
     diag(initial_parameters$pr_y) <- random_uniform
 
@@ -51,6 +54,9 @@ is_diag_dominant <- function(pr_y) {
 }
 
 get_min_distance_estimates_time_homogeneous <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
+
+    message("Starting min dist estimation, initial values for diagonals of Pr[ Y | S ] matrix are:")
+    print(diag(initial_params$pr_y))
 
     M_S_joint_initial <- t(initial_params$P * matrix(initial_params$mu, initial_params$n_components, initial_params$n_components))
 
@@ -95,6 +101,9 @@ get_min_distance_estimates_time_homogeneous <- function(initial_params, M_Y_join
 }
 
 get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_joint_hat_inverse_list, M_fixed_y_Y_joint_hat_list, dtable) {
+
+    message("Starting min dist estimation, initial values for diagonals of Pr[ Y | S ] matrix are: ")
+    print(diag(initial_params$pr_y))
 
     M_S_joint_list_initial <- lapply(seq_along(initial_params$P_list), function(time_index) {
         ## Joint distribution of S_t, S_{t+1} implied by initial params
@@ -146,27 +155,17 @@ get_min_distance_estimates <- function(initial_params, M_Y_joint_hat_list, M_Y_j
                                 convergence=solnp_result$convergence,
                                 mu=colSums(M_S_joint_list_hat_solnp[[1]]),
                                 objfn_values=solnp_result$values,
-                                x_guess=x_guess)
+                                x_guess=x_guess,
+                                n_components=initial_params$n_components)
 
     return(min_dist_params_hat)
 
 }
 
-get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0, panel, n_random_starts=10) {
-
-    ## Params0 are true HMM parameters used to generate data
+get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, n_random_starts_em=10, n_random_starts_md=1, diag_min=0.6, diag_max=0.98, skip_ml_if_md_is_diag_dominant=FALSE, use_md_as_initial_values_for_em=FALSE) {
 
     require(data.table)
     require(Rsolnp)
-
-    random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
-
-    em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-        return(get_expectation_maximization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
-    })
-    em_likelihoods <- sapply(em_params_hat_list, function(x) {
-        return(max(x$loglik))
-    })
 
     for(idx in seq_along(panel)) {
         panel[[idx]]$point_id <- idx
@@ -181,22 +180,39 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
     dtable[, y_one_period_ahead := c(tail(y, .N-1), NA), by="point_id"]
     dtable[, y_two_periods_ahead := c(tail(y, .N-2), NA, NA), by="point_id"]
 
+    ## Joint distribution of (Y_{t+1}, Y_{t})
     M_Y_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {
         with(subset(dtable, time == fixed_t), prop.table(table(y_one_period_ahead, y)))
-    })  # Joint distribution of (Y_{t+1}, Y_{t}) and (Y_{t+2}, Y_{t+1})
-
-    ## Compute inverses once and pass them to get_min_distance_estimates / solnp
-    M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
-
-    ## TODO Need to handle edge case where any of these matrices are not invertible, which might happen at small sample sizes
-    M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
-        lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
-            return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
-                        table(y_one_period_ahead, y)) / sum(dtable$time == fixed_t))
-        })
     })
 
-    min_dist_params_hat <- lapply(random_initial_parameters,
+    ## Compute inverses once and pass them to get_min_distance_estimates / solnp
+    ## TODO Possible bug surfaces here when matrix isn't square
+    ## Can happen if a certain Y is not observed at all (in the entire panel) at a certain time index
+    M_Y_joint_hat_inverse_list <- lapply(M_Y_joint_hat_list, solve)
+
+    ## Joint distribution of (Y_{t+2}, Y_{t+1}, Y_{t})
+    M_fixed_y_Y_joint_hat_list <- lapply(seq_len(params0$n_components), function(fixed_y) {
+        lapply(seq_len(max(dtable$time) - 2), function(fixed_t) {
+            ## Note: we need to pass factors to table() so that it includes
+            ## rows and columns of zeros in cases where a certain class (factor level) isn't observed
+            levels <- seq_len(params0$n_components)
+            return(with(subset(dtable, time == fixed_t & y_two_periods_ahead == fixed_y),
+                        table(factor(y_one_period_ahead, levels=levels),
+                              factor(y, levels=levels))) / sum(dtable$time == fixed_t &
+                                                               !is.na(dtable$y_two_periods_ahead) &
+                                                               !is.na(dtable$y_one_period_ahead) &
+                                                               !is.na(dtable$y)))
+        })
+    })    
+
+    random_initial_parameters_md <- replicate(n=n_random_starts_md,
+                                              get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
+                                              simplify=FALSE)
+
+    message("Random initial MD parameters:")
+    print(random_initial_parameters_md)
+
+    min_dist_params_hat <- lapply(random_initial_parameters_md,
                                   get_min_distance_estimates,
                                   M_Y_joint_hat_list=M_Y_joint_hat_list,
                                   M_Y_joint_hat_inverse_list=M_Y_joint_hat_inverse_list,
@@ -213,33 +229,66 @@ get_hmm_and_minimum_distance_estimates_random_initialization <- function(params0
         return(is_diag_dominant(x$pr_y))
     })
 
+    if(skip_ml_if_md_is_diag_dominant) {
+        if(all(diag(min_dist_params_hat_best_objfn$pr_y) > 0.51)) {
+            message("MD Pr[ Y | S ] is diag dominant, skipping EM/ML")
+            return(list("panel_size"=length(panel),
+                        "M_Y_joint_hat"=M_Y_joint_hat_list,
+                        "initial_parameters_md"=random_initial_parameters_md,
+                        "min_dist_params_hat"=min_dist_params_hat,
+                        "min_dist_objfn_values"=min_dist_objfn_values,
+                        "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
+                        "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant))
+        } else {
+            message("MD Pr[ Y | S ] is not diag dominant, will run EM/ML")
+        }
+    }
+
+    if(use_md_as_initial_values_for_em && all(diag(min_dist_params_hat_best_objfn$pr_y) > 0.51)) {
+        message("Using MD estimates as initial values for EM")
+        initial_parameters_em <- list(min_dist_params_hat_best_objfn)
+    } else {
+        ## If use_md_as_initial_values_for_em is false _or_ if MD is not diagonally dominant,
+        ## we start EM at random values
+        message("Using random initial values for EM")
+        initial_parameters_em <- replicate(n=n_random_starts_em,
+                                           get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
+                                           simplify=FALSE)
+    }    
+
+    ## TODO How often are we hitting max_iter?  Make it a parameter
+    em_params_hat_list <- lapply(initial_parameters_em, function(initial_params) {
+        return(get_expectation_maximization_estimates(panel, initial_params, max_iter=40, epsilon=0.001))
+    })
+    em_likelihoods <- sapply(em_params_hat_list, function(x) {
+        return(max(x$loglik))
+    })
+
     em_params_hat_best_likelihood <- em_params_hat_list[[which.max(em_likelihoods)]]
 
     return(list("panel_size"=length(panel),
                 "M_Y_joint_hat"=M_Y_joint_hat_list,
                 "em_params_hat_list"=em_params_hat_list,
                 "em_params_hat_loglikelihoods"=em_likelihoods,
-                "initial_parameters_list"=random_initial_parameters,
+                "initial_parameters_em"=initial_parameters_em,
+                "initial_parameters_md"=random_initial_parameters_md,
                 "em_params_hat_best_likelihood"=em_params_hat_best_likelihood,
                 "min_dist_params_hat"=min_dist_params_hat,
                 "min_dist_objfn_values"=min_dist_objfn_values,
                 "min_dist_params_hat_best_objfn"=min_dist_params_hat_best_objfn,
-                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant))
+                "min_dist_pr_y_is_diag_dominant"=min_dist_pr_y_is_diag_dominant,
+                "skip_ml_if_md_is_diag_dominant"=skip_ml_if_md_is_diag_dominant,
+                "use_md_as_initial_values_for_em"=use_md_as_initial_values_for_em))
 }
 
-get_minimum_distance_estimates_random_initialization_time_homogeneous <- function(params0, panel, n_random_starts=10) {
+get_minimum_distance_estimates_random_initialization_time_homogeneous <- function(params0, panel, n_random_starts=10, diag_min=0.6, diag_max=0.98) {
 
     require(data.table)
     require(Rsolnp)
 
-    random_initial_parameters <- replicate(n=n_random_starts, get_random_initial_parameters(params0), simplify=FALSE)
-
-    ## em_params_hat_list <- lapply(random_initial_parameters, function(initial_params) {
-    ##     return(get_expectation_maximization_estimates(panel, initial_params, max_iter=30, epsilon=0.001))
-    ## })
-    ## em_likelihoods <- sapply(em_params_hat_list, function(x) {
-    ##     return(max(x$loglik))
-    ## })
+    random_initial_parameters <- replicate(n=n_random_starts,
+                                           get_random_initial_parameters(params0, diag_min=diag_min, diag_max=diag_max),
+                                           simplify=FALSE)
 
     for(idx in seq_along(panel)) {
         panel[[idx]]$point_id <- idx
@@ -315,6 +364,9 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
         return(matrix(x[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
     stopifnot(length(candidate_M_S_joint_list) == length(M_Y_joint_hat_inverse_list))
+    ## TODO Instead of summing over all fixed_y, could use only those for which the matrix has the right shape
+    ## Rare class issue
+    ## TODO Or maybe the solution in this case is simply to make sure the Y_t, Y_t+1, Y_t+2 matrix has the right shape, even if it contains zeros?
     candidate_D_list <- lapply(seq_len(n_components), function(fixed_y) {
         lapply(seq_len(max_time - 2), function(fixed_t) {
             candidate_M_S_joint <- candidate_M_S_joint_list[[fixed_t + 1]]
@@ -327,7 +379,7 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
         })
     })
 
-    ## TODO This assumes n_components == 3
+    ## TODO This assumes n_components == 3, generalize
     if(abs(candidate_M_Y_given_S[1, 1] - candidate_M_Y_given_S[1, 2]) < 0) message('Close to non diag dom')
 
     stopifnot(length(candidate_D_list) == length(M_fixed_y_Y_joint_hat_list))  # Careful, lists of lists
@@ -476,7 +528,8 @@ apply_viterbi_path_in_parallel <- function(panel, params_hat, max_cores=30) {
 }
 
 baum_welch <- function(panel_element, params) {
-    ## Baum-Welch algorithm for HMM with discrete hidden x, discrete observations y (NAs allowed)
+    ## Baum-Welch algorithm for HMM with discrete hidden x,
+    ## discrete observations y (NAs allowed assuming data is missing completely at random)
     ## Written following Ramon van Handel's HMM notes, page 40, algorithm 3.2
     ## https://www.princeton.edu/~rvan/orf557/hmm080728.pdf
     ## Careful, his observation index is in {0, 1, ... , n} while I use {1, 2, ... , y_length}
@@ -548,7 +601,10 @@ get_expectation_maximization_estimates <- function(panel, params, max_iter, epsi
     ## EM for panel of independent HMM realizations; stop at max_iter or distance < epsilon
     ## Written following Ramon van Handel's HMM notes page 87, algorithm 6.1, modified for panel data
     ## https://www.princeton.edu/~rvan/orf557/hmm080728.pdf
-    message("starting em ", Sys.time())
+
+    message("starting em, time is ", Sys.time(), ", initial values for diagonals of Pr[ Y | S ] matrix are: ")
+    print(diag(params$pr_y))
+
     stopifnot(valid_parameters(params))
     observation_lengths <- vapply(panel, function(panel_element) {
         length(panel_element$y)
@@ -571,7 +627,7 @@ get_expectation_maximization_estimates <- function(panel, params, max_iter, epsi
             denominator <- Reduce("+", denominators)
             stopifnot(all(rowSums(denominator) > 0))  # Can fail if a state has zero probability
             stopifnot(all(denominator > 0))
-                P <- numerator / denominator
+            P <- numerator / denominator
             stopifnot(isTRUE(all.equal(rowSums(P), rep(1, params$n_components))))
             return(P)
         })
@@ -677,7 +733,7 @@ get_expectation_maximization_estimates <- function(panel, params, max_iter, epsi
         rm(baum_welch_list)
         gc()
     }
-    message("done running em ", Sys.time())
+    message("done running em, time is ", Sys.time())
     params$time_finished_em <- Sys.time()
     return(params)
 }
@@ -706,6 +762,7 @@ simulate_discrete_markov <- function(params) {
 
 simulate_hmm <- function(params) {
     stopifnot(valid_parameters(params))
+    ## TODO This is called S in the paper, not X.  Call it "state" for clarity?
     x <- simulate_discrete_markov(params)
     if("pr_y" %in% names(params)) {
         y <- vapply(x, function(x) {
