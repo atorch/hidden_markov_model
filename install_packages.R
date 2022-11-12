@@ -11,4 +11,4 @@ install_version("Rsolnp", version="1.16")
 install_version("stargazer", version="5.2.3")
 install_version("optparse", version="1.7.3")
 install_version("plot.matrix", version="1.6.2")
-## TODO Also need stringr?
+install_version("stringr", version="1.4.1")
