@@ -4,9 +4,6 @@ library(optparse)
 library(parallel)
 source("hmm_functions.R")
 
-## TODO There's a second R script that runs after this one, make sure it works, rename it, put it in readme
-
-## TODO Distinguish n_simulations, number of replications
 opt_list <- list(make_option("--n_simulations", default=100, type="integer"))
 opt <- parse_args(OptionParser(option_list=opt_list))
 

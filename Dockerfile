@@ -3,8 +3,11 @@ FROM r-base:4.2.1
 RUN apt-get update
 RUN yes | apt-get install gdal-bin libgdal-dev
 
-RUN R -e "install.packages(c('data.table', 'ggplot2', 'parallel', 'raster', 'rgdal', 'rgeos', 'Rsolnp', 'stargazer', 'optparse', 'ngspatial', 'plot.matrix', 'stringr'))"
+# First we install the remotes package
+RUN R -e "install.packages('remotes')"
 
-RUN yes | apt-get install parallel
+# Next, we use remotes::install_version to install specific versions of several R packages
+COPY install_packages.R .
+RUN Rscript install_packages.R
 
 WORKDIR /home/hidden_markov_model
