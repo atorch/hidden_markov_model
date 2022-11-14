@@ -12,15 +12,17 @@ by Adrian L. Torchiana,
 [Paul T. Scott](http://ptscott.com/), and
 [Eduardo Souza-Rodrigues](https://souza-rodrigues.economics.utoronto.ca/).
 
-## R Simulations
+## How to Run the Code
 
 We run our code in a Docker container so that our environment is reproducible.
-Start by [cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository), [installing Docker](https://docs.docker.com/engine/install/), and then run these commands:
+Start by [cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository),
+[installing Docker](https://docs.docker.com/engine/install/), and then run these commands:
 ```bash
 sudo docker build -f ~/hidden_markov_model/Dockerfile ~/hidden_markov_model --tag=hidden_markov_model
 ```
 
-The `build` command above will use the [Dockerfile](Dockerfile) to create an image with R version 4.2.1 and several R packages installed.
+The `build` command above will use the [Dockerfile](Dockerfile) to create an image with R version 4.2.1 and
+[several R packages](install_packages.R) installed.
 We can now use that image to run scripts:
 
 ```bash
@@ -32,13 +34,18 @@ The code in [simulation_simple.R](simulation_simple.R) runs simple simulations t
 confirm that the estimation functions are working correctly. Its output is not used in the paper.
 
 All R scripts should be run inside the container, i.e. following the `docker run` command as above.
+Most of the simulations will save output files to the [output](output) directory.
+
+### Baseline Results
 
 To reproduce section `D.2 Baseline Results`, run
 ```bash
 Rscript simulation_baseline.R --n_simulations 100
 Rscript describe_simulation_baseline.R --simulation_date yyyy-mm-dd
 ```
-where `yyyy-mm-dd` is the date on which you ran `simulation_baseline.R`.
+where `yyyy-mm-dd` is the date on which you ran [simulation_baseline.R](simulation_baseline.R).
+
+### Spatial Dependence and Serial Correlation
 
 To reproduce section `D.4 Spatial Dependence and Serial Correlation`, run
 ```bash
@@ -46,4 +53,9 @@ Rscript simulation_spatial_corr.R --n_simulations 100
 Rscript simulation_spatial_corr.R --n_simulations 100 --z_constant_over_time
 ```
 
-These scripts will save output files to the [output](output) directory.
+### Embrapa Validation
+
+The code for section `6 Validation Exercise Using Land Cover Data` is
+[fit_embrapa_validation_hmm.R](fit_embrapa_validation_hmm.R). While we have
+made the Embrapa validation code public, the input dataset used in this section
+is private and is not included in the repo.
