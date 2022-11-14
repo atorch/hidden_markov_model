@@ -28,6 +28,7 @@ source("embrapa_validation_landuse_mapping.R")
 source("hmm_functions.R")
 source("ggplot_utils.R")
 
+## Note: this file is private and is not included in the repo
 points <- readRDS("~/Dropbox/amazon_hmm_shared/embrapa_validation/embrapa_validation_points_with_covariates.rds")
 message("done loading ", nrow(points), " point-years, ", length(unique(points$point_id)), " unique spatial points")
 
