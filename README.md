@@ -36,8 +36,9 @@ All R scripts should be run inside the container, i.e. following the `docker run
 To reproduce section `D.2 Baseline Results`, run
 ```bash
 Rscript simulation_baseline.R --n_simulations 100
-Rscript describe_simulation_baseline.R
+Rscript describe_simulation_baseline.R --simulation_date yyyy-mm-dd
 ```
+where `yyyy-mm-dd` is the date on which you ran `simulation_baseline.R`.
 
 To reproduce section `D.4 Spatial Dependence and Serial Correlation`, run
 ```bash
