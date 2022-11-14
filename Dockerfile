@@ -11,3 +11,8 @@ COPY install_packages.R .
 RUN Rscript install_packages.R
 
 WORKDIR /home/hidden_markov_model
+
+# We'll use this script in our github workflow
+COPY simulation_simple.R .
+COPY hmm_functions.R .
+COPY hmm_parameters.R .

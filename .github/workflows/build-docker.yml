@@ -8,6 +8,7 @@ on:
 
 jobs:
 
+  
   build:
 
     runs-on: ubuntu-latest
@@ -15,4 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag hidden_markov_model:$(date +%s)
+      run: docker build . --file Dockerfile --tag hidden_markov_model
+
+    - name: Run Simple Simulation
+      run: docker run hidden_markov_model bash -c "Rscript simulation_simple.R"
