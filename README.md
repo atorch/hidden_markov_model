@@ -7,7 +7,10 @@ This repo includes R code for
 ## Citations
 
 Please cite "Improving Estimates of Transitions from Satellite Data: A Hidden Markov Model Approach"
-by Adrian L. Torchiana, Ted Rosenbaum, Paul T. Scott, and Eduardo Souza-Rodrigues.
+by Adrian L. Torchiana,
+[Ted Rosenbaum](https://www.tedrosenbaum.org/),
+[Paul T. Scott](http://ptscott.com/), and
+[Eduardo Souza-Rodrigues](https://souza-rodrigues.economics.utoronto.ca/).
 
 ## R Simulations
 
