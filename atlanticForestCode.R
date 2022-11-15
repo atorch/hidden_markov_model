@@ -12,21 +12,17 @@ baseYear <- 2010
 
 library(ggplot2)
 library(data.table)
-library(lfe)
-library(rmarkdown)
 library(stargazer)
 library(scales)
-library(sp)
-library(sf)
 library(stringr)
-library(raster)
+
 
 #Colorblind friendly palettes http://www.cookbook-r.com/Graphs/Colors_(ggplot2)/
 # The palette with black:
 cbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
-setwd('/home/ted/Dropbox/amazon_hmm_shared/Atlantic_Forest_Regressions/')
-carbonStockResDir <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'
+setwd('./Atlantic_Forest_Regressions/')
+carbonStockResDir <- './carbon_stock_results'
 carbonStockFiles <- list.files(carbonStockResDir,full.names = TRUE)
 
 ##input data
@@ -39,7 +35,7 @@ tilesWithViterbi <- str_match(carbonStockFiles,'Carbon_([1-9][0-9]+1\\_[1-9][0-9
 setdiff(restrictedDat[,unique(window_id)],tilesWithViterbi)
 
 ## List tiles not in restricted dat file, but for which we have a viterbi file
-tilesInCarbonFiles <- str_match(list.files('/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'),'Carbon_([1-9][0-9]+_[1-9][0-9]+)')[,2]
+tilesInCarbonFiles <- str_match(list.files('./carbon_stock_results'),'Carbon_([1-9][0-9]+_[1-9][0-9]+)')[,2]
 setdiff(tilesInCarbonFiles,restrictedDat[,unique(window_id)])
 
 
