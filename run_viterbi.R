@@ -7,7 +7,7 @@ library(data.table)
 library(stringr)
 library(optparse)
 
-source("src/hmm_functions.R")
+source("hmm_functions.R")
 hmmResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/mapbiomas_estimates_rds_files'
 carbonStockResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'
 

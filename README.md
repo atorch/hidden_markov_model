@@ -59,3 +59,15 @@ The code for section `6 Validation Exercise Using Land Cover Data` is
 [fit_embrapa_validation_hmm.R](fit_embrapa_validation_hmm.R). While we have
 made the Embrapa validation code public, the input dataset used in this section
 is private and is not included in the repo.
+
+### Atlantic Forest
+
+The code for section `7 Empirical Exercise: Carbon Stocks in the Atlantic Forest`
+has several steps:
+
+```bash
+./run_mapbiomas.sh
+Rscript combine_mapbiomas_estimates.R
+```
+
+Like section 6, the code for section 7 is public but the input files (the "raw" mapbiomas rasters) are private.
