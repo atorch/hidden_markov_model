@@ -16,9 +16,18 @@ by Adrian L. Torchiana,
 
 We run our code in a Docker container so that our environment is reproducible.
 Start by [cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository),
-[installing Docker](https://docs.docker.com/engine/install/), and then run these commands:
+[installing Docker](https://docs.docker.com/engine/install/), and changing directory into the root of this repo:
+
 ```bash
-sudo docker build -f ~/hidden_markov_model/Dockerfile ~/hidden_markov_model --tag=hidden_markov_model
+cd hidden_markov_model
+```
+
+At this point your working directory should be the root of this repo, and if you `ls` you should see
+several .R files as well as the README.md file that you are currently reading.
+
+Start by running
+```bash
+sudo docker build -f Dockerfile . --tag=hidden_markov_model
 ```
 
 The `build` command above will use the [Dockerfile](Dockerfile) to create an image with R version 4.2.1 and
@@ -26,9 +35,13 @@ The `build` command above will use the [Dockerfile](Dockerfile) to create an ima
 We can now use that image to run scripts:
 
 ```bash
-sudo docker run -it -v ~/hidden_markov_model:/home/hidden_markov_model hidden_markov_model bash
+sudo docker run -it -v /home/$USER/hidden_markov_model:/home/hidden_markov_model hidden_markov_model bash
 Rscript simulation_simple.R
 ```
+
+Note that the `-v` in the `docker run` command above is mounting a volume, and assumes that you cloned this repo
+into `/home/$USER/hidden_markov_model`. If you cloned this repo into some other location,
+replace `/home/$USER/hidden_markov_model` with the correct path.
 
 The code in [simulation_simple.R](simulation_simple.R) runs simple simulations that are used to
 confirm that the estimation functions are working correctly. Its output is not used in the paper.
