@@ -7,7 +7,7 @@ library(data.table)
 library(stringr)
 library(optparse)
 
-source("src/hmm_functions.R")
+source("hmm_functions.R")
 hmmResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/mapbiomas_estimates_rds_files'
 carbonStockResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'
 
@@ -252,7 +252,3 @@ carbonStockDatForest[,list(avg = mean(carbonVal,na.rm=TRUE),
 viterbiResults <- list(csNonForest = carbonStockDatNonForest,csForest = carbonStockDatForest,landuse = forestAgeDat)
 
 saveRDS(viterbiResults, file.path(carbonStockResultsPath, sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels,rasterYear)))
-
-## library(ggplot2)
-## plt <- ggplot(carbonStockDatForest,aes(x = forest_age, y = carbonVal)) + stat_summary()
-## ggsave('temp.png')

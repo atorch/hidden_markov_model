@@ -140,7 +140,7 @@ adjacency <- adjacency.matrix(m=n_pixels_per_side, n=n_pixels_per_side)
 params0$z_constant_over_time <- opt$z_constant_over_time
 
 for(pr_missing_data in c(0.0, 0.1)) {
-    ## TODO Make this a parameter
+
     for(include_z_in_simulation in c(TRUE, FALSE)) {
 
         if(include_z_in_simulation) {
@@ -206,8 +206,6 @@ for(pr_missing_data in c(0.0, 0.1)) {
                                                 params0$ising_beta,
                                                 opt$n_simulations)
                 saveRDS(simulations, simulations_filename)
-
-                ## TODO Include summary stats about Z in simulation summary?  Should be around 50-50 for high and low "clouds"
 
                 simulation_summaries_pr_y <- lapply(simulations, function(simulation) {
                     data.table(

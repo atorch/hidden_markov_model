@@ -4,7 +4,7 @@ library(ggplot2)
 library(optparse)
 library(raster)
 
-source("src/hmm_functions.R")
+source("hmm_functions.R")
 mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 
 opt_list <- list(make_option("--row", default=50000, type="integer"),
