@@ -79,8 +79,10 @@ The code for section `7 Empirical Exercise: Carbon Stocks in the Atlantic Forest
 has several steps:
 
 ```bash
-./run_mapbiomas.sh
+./run_mapbiomas_all_windows.sh
 Rscript combine_mapbiomas_estimates.R
+./run_viterbi.sh
+Rscript atlantic_forest_carbon_stock.R
 ```
 
 Like section 6, the code for section 7 is public but the input files (the "raw" mapbiomas rasters) are private.
