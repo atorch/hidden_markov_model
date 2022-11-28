@@ -15,14 +15,14 @@ by Adrian L. Torchiana,
 ## How to Run the Code
 
 We run our code in a Docker container so that our environment is reproducible.
-Start by [cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository),
-[installing Docker](https://docs.docker.com/engine/install/), and changing directory into the root of this repo:
+Start by [installing Docker](https://docs.docker.com/engine/install/),
+[cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository), and changing directory into the root of the repo:
 
 ```bash
 cd hidden_markov_model
 ```
 
-At this point your working directory should be the root of this repo, and if you `ls` you should see
+At this point your working directory should be the root of the repo, and if you `ls` you should see
 several .R files as well as the README.md file that you are currently reading.
 
 Start by running
@@ -40,7 +40,7 @@ Rscript simulation_simple.R
 ```
 
 Note that the `-v` in the `docker run` command above is mounting a volume, and assumes that you cloned this repo
-into `/home/$USER/hidden_markov_model`. If you cloned this repo into some other location,
+into `/home/$USER/hidden_markov_model`. If you cloned into some other location,
 replace `/home/$USER/hidden_markov_model` with the correct path.
 
 The code in [simulation_simple.R](simulation_simple.R) runs simple simulations that are used to
