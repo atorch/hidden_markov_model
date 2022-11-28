@@ -81,7 +81,8 @@ has several steps:
 ```bash
 ./run_mapbiomas_all_windows.sh
 Rscript combine_mapbiomas_estimates.R
-Rscript run_viterbi.R
+./run_viterbi.sh
+Rscript atlantic_forest_carbon_stock.R
 ```
 
 Like section 6, the code for section 7 is public but the input files (the "raw" mapbiomas rasters) are private.
