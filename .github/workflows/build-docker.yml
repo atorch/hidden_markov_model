@@ -17,6 +17,7 @@ jobs:
         with:
           context: .
           tags: hidden_markov_model:latest
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
