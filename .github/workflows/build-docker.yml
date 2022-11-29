@@ -13,10 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: docker/setup-buildx-action@v1
-      - uses: docker/build-push-action@v2
+      - uses: docker/build-push-action@v3
         with:
           context: .
-          tags: hidden_markov_model
+          tags: hidden_markov_model:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
