@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: Build Docker image
 
 on:
   push:
@@ -7,12 +7,14 @@ on:
     branches: [ master ]
 
 jobs:
-
-  build:
-
-    runs-on: ubuntu-latest
-
+  build-with-docker:
+    name: Build with Docker
+    runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v2
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag hidden_markov_model:$(date +%s)
+      - uses: actions/checkout@v3
+      - uses: docker/setup-buildx-action@v1
+      - uses: docker/build-push-action@v2
+        with:
+          context: .
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
