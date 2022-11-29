@@ -7,7 +7,10 @@ library(data.table)
 library(stringr)
 library(optparse)
 
-source("src/hmm_functions.R")
+source("hmm_functions.R")
+
+## Note: these results are not included in the repo and these paths are hardcoded
+## The code for this section is shared here, but the inputs and results aren't included in our public repo
 hmmResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/mapbiomas_estimates_rds_files'
 carbonStockResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'
 
@@ -28,7 +31,7 @@ width_in_pixels <- opt$width_in_pixels
 subsample_for_viterbi <- opt$subsample
 rasterYear <- opt$raster_year
 
-##Results file
+## This step uses .rds files saved by run_estimation_single_mapbiomas_window.R
 filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_use_md_as_initial_values_for_em.rds", row, col, width_in_pixels)
 fullFilePath <- file.path(hmmResultsPath,filename)
 if (!file.exists(fullFilePath)){
@@ -37,19 +40,19 @@ if (!file.exists(fullFilePath)){
 }
 estimates <- readRDS(fullFilePath)
 
-##Import mapbiomas
+## Import mapbiomas
 mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 mapbiomas <- stack(mapBioMassFile)
 
 
-##Carbon Stock File (file is Carbon Stock in rasterYear)
+## Carbon Stock File (file is Carbon Stock in rasterYear)
 carbonFile <- paste0('/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_data/carbonStockRaster',rasterYear,'.tif')
 carbonRaster <- terra::rast(carbonFile)
 
 ## Stop analysis if pr_y is not diagonally dominant
 if(any(diag(estimates$em_params_hat_best_likelihood$pr_y)<.5)) stop()
 
-##Get values for analysis from mapbiomas raster
+## Get values for analysis from mapbiomas raster
 window <- getValuesBlock(mapbiomas,
                          row=row,
                          col=col,
@@ -58,16 +61,12 @@ window <- getValuesBlock(mapbiomas,
 
 cellsToPull <- cellFromRowColCombine(mapbiomas, seq(row,row+width_in_pixels-1),seq(col,col+width_in_pixels-1))
 
-##Window 2 is equivalent to Window
-##window2 <- extract(mapbiomas,cellsToPull)
-
-
 opt <- estimates$opt
 mapbiomas_classes_to_keep <- estimates$mapbiomas_classes_to_keep
 
 ## We need to combine classes (in the exact same way we did before estimation)
 ## and then generate the recoded window before running Viterbi
-## A bunch of this is copy pasted from explore_mapbiomas.R
+## TODO A bunch of this is copy pasted
 ## TODO Put it in a function that we can import/source and reuse
 
 ## When constructing our panel (for estimation), we will only consider pixels that contain at least one non-missing observation
@@ -252,7 +251,3 @@ carbonStockDatForest[,list(avg = mean(carbonVal,na.rm=TRUE),
 viterbiResults <- list(csNonForest = carbonStockDatNonForest,csForest = carbonStockDatForest,landuse = forestAgeDat)
 
 saveRDS(viterbiResults, file.path(carbonStockResultsPath, sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels,rasterYear)))
-
-## library(ggplot2)
-## plt <- ggplot(carbonStockDatForest,aes(x = forest_age, y = carbonVal)) + stat_summary()
-## ggsave('temp.png')

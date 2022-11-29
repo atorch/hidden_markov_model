@@ -4,7 +4,7 @@ library(ggplot2)
 library(optparse)
 library(raster)
 
-source("src/hmm_functions.R")
+source("hmm_functions.R")
 mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 
 opt_list <- list(make_option("--row", default=50000, type="integer"),
@@ -104,10 +104,6 @@ for(class in unique_mapbiomas_classes) {
 mapbiomas_classes_to_keep <- unique_mapbiomas_classes[!unique_mapbiomas_classes %in% rare_mapbiomas_classes]
 message("Keeping the following classes:")
 print(mapbiomas_classes_to_keep)
-
-## TODO Drop points that are NA in every year
-## TODO Count the number of points that are NA in every year
-## TODO Sanity check, run Viterbi, save rasters, visualize
 
 table(window)
 class_frequencies <- round(table(window) / (nrow(window) * ncol(window)), 4)

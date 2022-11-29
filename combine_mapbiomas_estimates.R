@@ -19,7 +19,6 @@ brazil_municipalities <- readOGR(dsn="/home/ted/Dropbox/amazon_hmm_shared/Maps_a
 brazil_municipality_names <- brazil_municipalities$NM_MUNICIP
 brazil_municipality_polygons <- as(brazil_municipalities, "SpatialPolygons")
 
-# TODO Use spTransform here?  These are originally "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs"
 proj4string(brazil_state_polygons) <- crs_longlat
 proj4string(brazil_municipality_polygons) <- crs_longlat
 

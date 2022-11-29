@@ -10,7 +10,6 @@ get_reforestation_prob_from_P <- function(P) {
 
 get_random_initial_parameters <- function(params0, diag_min, diag_max) {
 
-    ## TODO Does this function really need params0 as an arg?  Or only params0$n_components and n_time_periods?
     ## Given a true set of HMM parameters, return random incorrect parameters from which to begin parameter estimation
 
     stopifnot(0.5 < diag_min && diag_min < diag_max && diag_max <= 1)
@@ -21,8 +20,6 @@ get_random_initial_parameters <- function(params0, diag_min, diag_max) {
         initial_parameters$P_list <- lapply(params0$P_list, function(correct_P) {
 
             ## Probabilities on diagonals of the transition probability matrices
-            ## TODO Does min_dist sometimes get stuck at "the wrong" edge of the parameter space, and, if so,
-            ## does that happen less frequently if we bump up the minimum value on the diagonals of initial_parameters$P_list?
             random_uniform <- runif(params0$n_components, min=diag_min, max=diag_max)
 
             P <- matrix((1 - random_uniform) / (params0$n_components - 1), nrow=nrow(correct_P), ncol=ncol(correct_P))
@@ -256,7 +253,6 @@ get_em_and_min_dist_estimates_random_initialization <- function(params0, panel, 
                                            simplify=FALSE)
     }    
 
-    ## TODO How often are we hitting max_iter?  Make it a parameter
     em_params_hat_list <- lapply(initial_parameters_em, function(initial_params) {
         return(get_expectation_maximization_estimates(panel, initial_params, max_iter=40, epsilon=0.001))
     })
@@ -364,9 +360,7 @@ objfn_minimum_distance <- function(x, M_Y_joint_hat_inverse_list, M_Y_joint_hat_
         return(matrix(x[seq((n_components^2)*time_index + 1, (n_components^2)*(1 + time_index))], n_components, n_components))
     })
     stopifnot(length(candidate_M_S_joint_list) == length(M_Y_joint_hat_inverse_list))
-    ## TODO Instead of summing over all fixed_y, could use only those for which the matrix has the right shape
-    ## Rare class issue
-    ## TODO Or maybe the solution in this case is simply to make sure the Y_t, Y_t+1, Y_t+2 matrix has the right shape, even if it contains zeros?
+
     candidate_D_list <- lapply(seq_len(n_components), function(fixed_y) {
         lapply(seq_len(max_time - 2), function(fixed_t) {
             candidate_M_S_joint <- candidate_M_S_joint_list[[fixed_t + 1]]
@@ -762,8 +756,10 @@ simulate_discrete_markov <- function(params) {
 
 simulate_hmm <- function(params) {
     stopifnot(valid_parameters(params))
-    ## TODO This is called S in the paper, not X.  Call it "state" for clarity?
+
+    ## This is the hidden state (called s in the paper)
     x <- simulate_discrete_markov(params)
+
     if("pr_y" %in% names(params)) {
         y <- vapply(x, function(x) {
             sample(seq_len(ncol(params$pr_y)), size=1, prob=params$pr_y[x, ])

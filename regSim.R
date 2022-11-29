@@ -28,7 +28,7 @@ trueDeforestPr <- alpha + xVec * beta
 
 nPixelPerCell <- 1000
 
-nSim <- 12  # TODO Turn back up to 100
+nSim <- 100
 
 params0 <- get_params0()
 
@@ -89,7 +89,6 @@ get_estimated_deforestation_rate_ground_truth <- function(panel) {
     setkey(dtable, point_id)
 
     ## Note: we use S for the hidden state in the paper, but it's called X in the simulate code
-    ## TODO Would be less confusing to use S in the code, can clean this up later
     dtable[, x_one_period_ahead := c(tail(x, .N-1), NA), by="point_id"]
 
     M_S_joint_hat_list <- lapply(seq_len(max(dtable$time) - 1), function(fixed_t) {

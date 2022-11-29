@@ -122,7 +122,6 @@ dt_melt[variable %like% '_naive', estimTypDisp := 'Freq']
 ## Note: the order of the factor levels controls the order along the x-axis in several of the graphs
 dt_melt[, estimTypDisp := factor(estimTypDisp, levels=c("Freq", "EM", "MD"))]
 
-## TODO Could probably condition on iter instead of these multiple variables, but maybe this is more clear?
 plt <- (ggplot(dt_melt[n_time_periods == 4 & prY11 == 90 & defRtLast == 20 & variable %like% 'deforestation_probability'],
                aes(y=value, x=estimTypDisp, group=variable)) +
         geom_boxplot() +
