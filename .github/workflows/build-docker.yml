@@ -22,4 +22,4 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Simple Simulation
-        run: docker run hidden_markov_model bash -c "Rscript simulation_simple.R"
+        run: docker run -v ${{ github.workspace }}:/home/hidden_markov_model hidden_markov_model bash -c "Rscript simulation_simple.R"
