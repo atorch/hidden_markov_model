@@ -11,4 +11,4 @@ COPY install_packages.R .
 RUN Rscript install_packages.R
 
 WORKDIR /home/hidden_markov_model
-mkdir AtlanticForestResults
+RUN mkdir AtlanticForestResults
