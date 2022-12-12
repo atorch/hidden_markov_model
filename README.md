@@ -16,7 +16,8 @@ by Adrian L. Torchiana,
 
 We run our code in a Docker container so that our environment is reproducible.
 Start by [installing Docker](https://docs.docker.com/engine/install/),
-[cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository), and changing directory into the root of the repo:
+[cloning this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository),
+and changing directory into the root of the repo:
 
 ```bash
 cd hidden_markov_model
