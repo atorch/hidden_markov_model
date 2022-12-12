@@ -9,10 +9,10 @@ library(optparse)
 
 source("hmm_functions.R")
 
-## Note: these results are not included in the repo and these paths are hardcoded
+## Note: these results are not included in the repo 
 ## The code for this section is shared here, but the inputs and results aren't included in our public repo
-hmmResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/mapbiomas_estimates_rds_files'
-carbonStockResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'
+hmmResultsPath <- './mapbiomas_estimates_rds_files'
+carbonStockResultsPath <- './carbon_stock_results'
 
 opt_list <- list(make_option("--row", default=16001, type="integer"),
                  make_option("--col", default=72001, type="integer"),
@@ -46,7 +46,7 @@ mapbiomas <- stack(mapBioMassFile)
 
 
 ## Carbon Stock File (file is Carbon Stock in rasterYear)
-carbonFile <- paste0('/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_data/carbonStockRaster',rasterYear,'.tif')
+carbonFile <- paste0('./carbon_stock_data/carbonStockRaster',rasterYear,'.tif')
 carbonRaster <- terra::rast(carbonFile)
 
 ## Stop analysis if pr_y is not diagonally dominant

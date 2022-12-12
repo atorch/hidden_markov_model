@@ -1,7 +1,7 @@
 FROM r-base:4.2.1
 
 RUN apt-get update
-RUN yes | apt-get install gdal-bin libgdal-dev
+RUN yes | apt-get install gdal-bin libgdal-dev parallel
 
 # First we install the remotes package
 RUN R -e "install.packages('remotes')"
@@ -11,3 +11,4 @@ COPY install_packages.R .
 RUN Rscript install_packages.R
 
 WORKDIR /home/hidden_markov_model
+mkdir AtlanticForestResults

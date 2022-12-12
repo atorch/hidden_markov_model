@@ -11,11 +11,11 @@ estimate_filenames <- list.files(path=fileDir,
 
 crs_longlat <- CRS("+proj=longlat")
 
-brazil_states <- readOGR(dsn="/home/ted/Dropbox/amazon_hmm_shared/Maps_administrative/state_boundaries/", layer="BRUFE250GC_SIR")
+brazil_states <- readOGR(dsn="./SupportingFiles/state_boundaries/", layer="BRUFE250GC_SIR")
 brazil_state_names <- brazil_states$NM_ESTADO
 brazil_state_polygons <- as(brazil_states, "SpatialPolygons")
 
-brazil_municipalities <- readOGR(dsn="/home/ted/Dropbox/amazon_hmm_shared/Maps_administrative/munic_boundaries/", layer="BRMUE250GC_SIR")
+brazil_municipalities <- readOGR(dsn="./SupportingFiles/munic_boundaries/", layer="BRMUE250GC_SIR")
 brazil_municipality_names <- brazil_municipalities$NM_MUNICIP
 brazil_municipality_polygons <- as(brazil_municipalities, "SpatialPolygons")
 
