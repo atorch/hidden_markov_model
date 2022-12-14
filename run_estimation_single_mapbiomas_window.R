@@ -5,9 +5,9 @@ library(optparse)
 library(raster)
 
 source("hmm_functions.R")
-mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
 
-opt_list <- list(make_option("--row", default=50000, type="integer"),
+opt_list <- list(make_option("--mapbiomas_raster_path", default="./HMM_MapBiomas_v2/mapbiomas.vrt"),
+                 make_option("--row", default=50000, type="integer"),
                  make_option("--col", default=51000, type="integer"),
                  make_option("--width_in_pixels", default=1000, type="integer"),
                  make_option("--subsample", default=0.1, type="double"),
@@ -21,7 +21,7 @@ opt_list <- list(make_option("--row", default=50000, type="integer"),
 opt <- parse_args(OptionParser(option_list=opt_list))
 message("command line options: ", paste(sprintf("%s=%s", names(opt), opt), collapse=", "))
 
-mapbiomas <- stack(mapBioMassFile)
+mapbiomas <- stack(opt$mapbiomas_raster_path)
 nlayers(mapbiomas)
 
 window <- getValuesBlock(mapbiomas,
@@ -36,7 +36,9 @@ window_extent <- extent(mapbiomas, opt$row, opt$row + opt$width_in_pixels, opt$c
 window_raster<- raster(window_extent, crs=crs(mapbiomas), nrows=opt$width_in_pixels, ncols=opt$width_in_pixels)
 for(time_index in c(1, 8)) {
     values(window_raster) <- window[, time_index]
-    filename <- sprintf("raster_window_%s_%s_width_%s_band_%s.tif", opt$row, opt$col, opt$width_in_pixels, time_index)
+    filename <- sprintf("./atlantic_forest_output/raster_window_%s_%s_width_%s_band_%s.tif", opt$row, opt$col, opt$width_in_pixels, time_index)
+
+    ## These .tifs aren't used anywhere in the code, but it can be helpful to inspect these rasters in qgis
     message("Writing ", filename)
     writeRaster(window_raster, filename, overwrite=TRUE)
 }
@@ -181,7 +183,7 @@ estimates$window_bbox <- as.data.frame(bbox(window_extent))
 estimates$fraction_missing_in_all_years <- fraction_missing_in_all_years
 estimates$count_missing_in_all_years <- count_missing_in_all_years
 
-filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s%s%s.rds",
+filename <- sprintf("./atlantic_forest_output/estimates_window_%s_%s_width_%s_class_frequency_cutoff_%s_subsample_%s_combined_classes%s%s%s%s.rds",
                     opt$row, opt$col, opt$width_in_pixels, opt$class_frequency_cutoff, opt$subsample,
                     ifelse(opt$grassland_as_forest, "_grassland_as_forest", ""),
                     ifelse(opt$combine_other_non_forest, "_combine_other_non_forest", ""),

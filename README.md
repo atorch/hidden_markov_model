@@ -79,6 +79,7 @@ The code for section `7 Empirical Exercise: Carbon Stocks in the Atlantic Forest
 has several steps:
 
 ```bash
+mkdir -p atlantic_forest_output
 ./run_mapbiomas_all_windows.sh
 Rscript combine_mapbiomas_estimates.R
 ./run_viterbi.sh
