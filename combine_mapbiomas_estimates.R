@@ -3,7 +3,7 @@ library(rgdal)
 library(rgeos)
 library(sp)
 
-fileDir <- "."
+fileDir <- "atlantic_forest_output"
 pattern <- "estimates_window_[0-9]*00[01]_[0-9]*00[01]_width_1000_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_use_md_as_initial_values_for_em.rds"
 estimate_filenames <- list.files(path=fileDir,
                                  pattern=pattern,
@@ -11,11 +11,11 @@ estimate_filenames <- list.files(path=fileDir,
 
 crs_longlat <- CRS("+proj=longlat")
 
-brazil_states <- readOGR(dsn="/home/ted/Dropbox/amazon_hmm_shared/Maps_administrative/state_boundaries/", layer="BRUFE250GC_SIR")
+brazil_states <- readOGR(dsn="./SupportingFiles/state_boundaries/", layer="BRUFE250GC_SIR")
 brazil_state_names <- brazil_states$NM_ESTADO
 brazil_state_polygons <- as(brazil_states, "SpatialPolygons")
 
-brazil_municipalities <- readOGR(dsn="/home/ted/Dropbox/amazon_hmm_shared/Maps_administrative/munic_boundaries/", layer="BRMUE250GC_SIR")
+brazil_municipalities <- readOGR(dsn="./SupportingFiles/munic_boundaries/", layer="BRMUE250GC_SIR")
 brazil_municipality_names <- brazil_municipalities$NM_MUNICIP
 brazil_municipality_polygons <- as(brazil_municipalities, "SpatialPolygons")
 
@@ -180,7 +180,8 @@ print(summary(df$deforestation_rate_md))
 df$window_id <- sprintf("%s_%s", df$window_row, df$window_col)
 df$year = df$time_index + 1985 ##changed from 1984 -- since the first year (1985) is elimianted b/c of the lag
 
-filename <- sprintf("estimated_deforestation_rates_%s_use_md_as_initial_values_for_em.csv", format(Sys.time(), "%Y_%m_%d"))
+filename <- file.path(fileDir,
+                      sprintf("estimated_deforestation_rates_%s_use_md_as_initial_values_for_em.csv", format(Sys.time(), "%Y_%m_%d")))
 message("Writing ", filename, ", dataframe dim is ", nrow(df), " by ", ncol(df))
 write.csv(df, filename, row.names=FALSE)
 
@@ -192,14 +193,14 @@ p <- (ggplot(df, aes(x=deforestation_rate_ml, y=deforestation_rate_md)) +
       ggtitle(title) +
       theme_bw() +
       theme(plot.title = element_text(hjust = 0.5)))
-filename <- "estimated_deforestation_rates_md_versus_ml.png"
+filename <- file.path(fileDir, "estimated_deforestation_rates_md_versus_ml.png")
 ggsave(p, filename=filename, width=6, height=4, units="in")
 
 p <- (ggplot(df, aes(x=deforestation_rate_freq, y=deforestation_rate_ml)) +
       geom_abline(slope=1, lty=2, alpha=0.5) +
       geom_point(alpha=0.15) +
       theme_bw())
-filename <- "estimated_deforestation_rates_ml.png"
+filename <- file.path(fileDir, "estimated_deforestation_rates_ml.png")
 ggsave(p, filename=filename, width=6, height=4, units="in")
 
 p <- (ggplot(subset(df, pr_y_diag_dominant_ml), aes(x=deforestation_rate_freq, y=deforestation_rate_ml)) +
@@ -208,14 +209,14 @@ p <- (ggplot(subset(df, pr_y_diag_dominant_ml), aes(x=deforestation_rate_freq, y
       ggtitle("Windows where estimated Pr[ Y | S ] is diag dominant") +
       theme_bw() +
       theme(plot.title = element_text(hjust = 0.5)))
-filename <- "estimated_deforestation_rates_ml_diag_dominant.png"
+filename <- file.path(fileDir, "estimated_deforestation_rates_ml_diag_dominant.png")
 ggsave(p, filename=filename, width=6, height=4, units="in")
 
 p <- (ggplot(df, aes(x=deforestation_rate_freq, y=deforestation_rate_md)) +
       geom_abline(slope=1, lty=2, alpha=0.5) +
       geom_point(alpha=0.15) +
       theme_bw())
-filename <- "estimated_deforestation_rates_md.png"
+filename <- file.path(fileDir, "estimated_deforestation_rates_md.png")
 ggsave(p, filename=filename, width=6, height=4, units="in")
 
 p <- (ggplot(subset(df, pr_y_diag_dominant_md), aes(x=deforestation_rate_freq, y=deforestation_rate_md)) +
@@ -224,5 +225,5 @@ p <- (ggplot(subset(df, pr_y_diag_dominant_md), aes(x=deforestation_rate_freq, y
       ggtitle("Windows where estimated Pr[ Y | S ] is diag dominant") +
       theme_bw() +
       theme(plot.title = element_text(hjust = 0.5)))
-filename <- "estimated_deforestation_rates_md_diag_dominant.png"
+filename <- file.path(fileDir, "estimated_deforestation_rates_md_diag_dominant.png")
 ggsave(p, filename=filename, width=6, height=4, units="in")

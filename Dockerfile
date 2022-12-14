@@ -1,7 +1,7 @@
 FROM r-base:4.2.1
 
 RUN apt-get update
-RUN yes | apt-get install gdal-bin libgdal-dev
+RUN yes | apt-get install gdal-bin libgdal-dev parallel
 
 # First we install the remotes package
 RUN R -e "install.packages('remotes')"

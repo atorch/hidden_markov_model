@@ -9,12 +9,8 @@ library(optparse)
 
 source("hmm_functions.R")
 
-## Note: these results are not included in the repo and these paths are hardcoded
-## The code for this section is shared here, but the inputs and results aren't included in our public repo
-hmmResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/mapbiomas_estimates_rds_files'
-carbonStockResultsPath <- '/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_results'
-
-opt_list <- list(make_option("--row", default=16001, type="integer"),
+opt_list <- list(make_option("--mapbiomas_raster_path", default="./HMM_MapBiomas_v2/mapbiomas.vrt"),
+                 make_option("--row", default=16001, type="integer"),
                  make_option("--col", default=72001, type="integer"),
                  make_option("--width_in_pixels", default=1000, type="integer"),
                  make_option("--raster_year", default=2017, type ="integer"),
@@ -32,25 +28,29 @@ subsample_for_viterbi <- opt$subsample
 rasterYear <- opt$raster_year
 
 ## This step uses .rds files saved by run_estimation_single_mapbiomas_window.R
+## These files are not included in the repo
 filename <- sprintf("estimates_window_%s_%s_width_%s_class_frequency_cutoff_0.005_subsample_0.01_combined_classes_grassland_as_forest_combine_other_non_forest_use_md_as_initial_values_for_em.rds", row, col, width_in_pixels)
-fullFilePath <- file.path(hmmResultsPath,filename)
+fullFilePath <- file.path("atlantic_forest_output", filename)
 if (!file.exists(fullFilePath)){
-    message('No Estimates for this Window -- exiting')
-    q('no')
+    message("No Estimates for this Window -- exiting")
+    q("no")
 }
 estimates <- readRDS(fullFilePath)
 
-## Import mapbiomas
-mapBioMassFile <- "./HMM_MapBiomas_v2/mapbiomas.vrt"
-mapbiomas <- stack(mapBioMassFile)
-
+## Load mapbiomas raster
+mapbiomas <- stack(opt$mapbiomas_raster_path)
 
 ## Carbon Stock File (file is Carbon Stock in rasterYear)
-carbonFile <- paste0('/home/ted/Dropbox/amazon_hmm_shared/carbon_stock_data/carbonStockRaster',rasterYear,'.tif')
+## This file is not included in the repo
+carbonFile <- paste0('./carbon_stock_data/carbonStockRaster', rasterYear, '.tif')
 carbonRaster <- terra::rast(carbonFile)
 
 ## Stop analysis if pr_y is not diagonally dominant
-if(any(diag(estimates$em_params_hat_best_likelihood$pr_y)<.5)) stop()
+if(any(diag(estimates$em_params_hat_best_likelihood$pr_y) < .5)) {
+    message("The diagonals of estimates$em_params_hat_best_likelihood$pr_y are ",
+            paste(diag(estimates$em_params_hat_best_likelihood$pr_y), collapse=", "))
+    q("no")
+}
 
 ## Get values for analysis from mapbiomas raster
 window <- getValuesBlock(mapbiomas,
@@ -125,10 +125,10 @@ forest_class <- 3
 agriculture_and_pasture_class <- 21
 water_rocks_class <- 33
 
-##Simulate path forward for another 20 years
+## Simulate path forward for another 20 years
 transMatrix <- estimates$em_params_hat_best_likelihood$P_list[[35]]
-simMarkovForwardFunc <- function(currentState,x){
-    sample.int(n=2,size =1, prob = transMatrix[currentState,])
+simMarkovForwardFunc <- function(currentState, x) {
+    sample.int(n=estimates$em_params_hat_best_likelihood$n_components, size=1, prob=transMatrix[currentState,])
 }
 
 nYearSim <- yearsVecExpand[length(yearsVecExpand)]-yearsVec[length(yearsVec)]
@@ -250,4 +250,4 @@ carbonStockDatForest[,list(avg = mean(carbonVal,na.rm=TRUE),
 
 viterbiResults <- list(csNonForest = carbonStockDatNonForest,csForest = carbonStockDatForest,landuse = forestAgeDat)
 
-saveRDS(viterbiResults, file.path(carbonStockResultsPath, sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels,rasterYear)))
+saveRDS(viterbiResults, file.path("atlantic_forest_output", sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels, rasterYear)))

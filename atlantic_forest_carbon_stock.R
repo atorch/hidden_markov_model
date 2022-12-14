@@ -15,13 +15,13 @@ library(data.table)
 library(stargazer)
 library(scales)
 library(stringr)
+library(pbapply)
 
 
 #Colorblind friendly palettes http://www.cookbook-r.com/Graphs/Colors_(ggplot2)/
 # The palette with black:
 cbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
-setwd('./Atlantic_Forest_Regressions/')
 carbonStockResDir <- './carbon_stock_results'
 carbonStockFiles <- list.files(carbonStockResDir,full.names = TRUE)
 
@@ -161,7 +161,6 @@ carbonStockCalcFunc <- function(fileNm,carbonRegRes = carbonRegV){
     return(carbonStockByYear)
 }
 
-library(pbapply)
 carbonStockResList <- pblapply(carbonStockFiles, carbonStockCalcFunc)
 carbonStockByYear <- rbindlist(carbonStockResList)[,list(carbonPred = mean(carbonPred) * hectaresAtlanticForest),
                                                    by = list(variable,year)]
