@@ -11,7 +11,7 @@ source("hmm_functions.R")
 
 opt_list <- list(make_option("--mapbiomas_raster_path", default="./HMM_MapBiomas_v2/mapbiomas.vrt"),
                  make_option("--row", default=54001, type="integer"),
-                 make_option("--col", default=52001, type="integer"),
+                 make_option("--col", default=5001, type="integer"),
                  make_option("--width_in_pixels", default=1000, type="integer"),
                  make_option("--raster_year", default=2017, type ="integer"),
                  make_option("--subsample", default=0.01, type="double"))
@@ -150,7 +150,7 @@ yearVecTmp <- yearsVecExpand[(length(yearsVec)):length(yearsVecExpand)]
 processedDatWideList <- list(
     viterbiDT = as.data.table(viterbi)[,year := yearsVec],
     futureSimBaseDT = as.data.table(futureSimBase)[,year := yearVecTmp],
-    futureSimNoDeforDT = as.data.table(futureSimBase)[,year := yearVecTmp],
+    futureSimNoDeforDT = as.data.table(futureSimNoDefor)[,year := yearVecTmp],
     obsDT = as.data.table(lapply(panel,function(dat) dat$y))[,year := yearsVec])
 
 processedDatDTList <- lapply(processedDatWideList,
