@@ -1,6 +1,20 @@
 ## Preliminaries
+library(ggplot2)
+library(data.table)
+library(stargazer)
+library(scales)
+library(stringr)
+library(pbapply)
+library(optparse)
 
 rm(list=ls())
+
+opt_list <- list(make_option("--input_file", default="estimated_deforestation_rates_2022_01_14_use_md_as_initial_values_for_em.csv"))
+
+opt <- parse_args(OptionParser(option_list=opt_list))
+
+##input file
+mapbiomasDat <- fread(opt$input_file)
 
 carbonToCO2 <- 44/12 # (44 units CO2/12 units C) from https://www.epa.gov/energy/greenhouse-gases-equivalencies-calculator-calculations-and-references
 tonsCO2ToDollars2040 <- 103 #from https://www.whitehouse.gov/wp-content/uploads/2021/02/TechnicalSupportDocument_SocialCostofCarbonMethaneNitrousOxide.pdf?source=email Using 2.5% discount rate for 2040 emissions
@@ -10,13 +24,6 @@ carbonToDollars2040 <- carbonToCO2 * tonsCO2ToDollars2040
 hectaresAtlanticForest <- 142274200 #From https://mapbiomas.org/en/mapbiomas-launches-1
 baseYear <- 2010
 
-library(ggplot2)
-library(data.table)
-library(stargazer)
-library(scales)
-library(stringr)
-library(pbapply)
-
 
 #Colorblind friendly palettes http://www.cookbook-r.com/Graphs/Colors_(ggplot2)/
 # The palette with black:
@@ -24,9 +31,6 @@ cbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2",
 
 carbonStockResDir <- './carbon_stock_results'
 carbonStockFiles <- list.files(carbonStockResDir,full.names = TRUE)
-
-##input data
-mapbiomasDat <- fread("estimated_deforestation_rates_2022_01_14_use_md_as_initial_values_for_em.csv")
 
 ##Data process
 restrictedDat <- mapbiomasDat[ pr_y_diag_dominant_ml == TRUE &  n_mapbiomas_classes  %in% c(2,3)]

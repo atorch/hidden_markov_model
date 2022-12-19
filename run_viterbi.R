@@ -10,8 +10,8 @@ library(optparse)
 source("hmm_functions.R")
 
 opt_list <- list(make_option("--mapbiomas_raster_path", default="./HMM_MapBiomas_v2/mapbiomas.vrt"),
-                 make_option("--row", default=16001, type="integer"),
-                 make_option("--col", default=72001, type="integer"),
+                 make_option("--row", default=54001, type="integer"),
+                 make_option("--col", default=5001, type="integer"),
                  make_option("--width_in_pixels", default=1000, type="integer"),
                  make_option("--raster_year", default=2017, type ="integer"),
                  make_option("--subsample", default=0.01, type="double"))
@@ -49,7 +49,7 @@ carbonRaster <- terra::rast(carbonFile)
 if(any(diag(estimates$em_params_hat_best_likelihood$pr_y) < .5)) {
     message("The diagonals of estimates$em_params_hat_best_likelihood$pr_y are ",
             paste(diag(estimates$em_params_hat_best_likelihood$pr_y), collapse=", "))
-    q("no")
+     q("no")
 }
 
 ## Get values for analysis from mapbiomas raster
@@ -150,7 +150,7 @@ yearVecTmp <- yearsVecExpand[(length(yearsVec)):length(yearsVecExpand)]
 processedDatWideList <- list(
     viterbiDT = as.data.table(viterbi)[,year := yearsVec],
     futureSimBaseDT = as.data.table(futureSimBase)[,year := yearVecTmp],
-    futureSimNoDeforDT = as.data.table(futureSimBase)[,year := yearVecTmp],
+    futureSimNoDeforDT = as.data.table(futureSimNoDefor)[,year := yearVecTmp],
     obsDT = as.data.table(lapply(panel,function(dat) dat$y))[,year := yearsVec])
 
 processedDatDTList <- lapply(processedDatWideList,
@@ -250,4 +250,4 @@ carbonStockDatForest[,list(avg = mean(carbonVal,na.rm=TRUE),
 
 viterbiResults <- list(csNonForest = carbonStockDatNonForest,csForest = carbonStockDatForest,landuse = forestAgeDat)
 
-saveRDS(viterbiResults, file.path("atlantic_forest_output", sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels, rasterYear)))
+saveRDS(viterbiResults, file.path("carbon_stock_results", sprintf("landUseAndCarbon_%s_%s_width_%s_%s.rds", row, col, width_in_pixels, rasterYear)))
