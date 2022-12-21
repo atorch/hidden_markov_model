@@ -115,7 +115,8 @@ stargazer(carbonRegV,type = 'latex',
           covariate.labels = c('$\\tilde\\alpha$', '$\\tilde\\beta$','$\\tilde\\gamma$','$\\delta$'),
           dep.var.caption = "",
           dep.var.labels = 'Carbon Stock',
-          notes = 'Data as described in text. Regression uses data from 2017.')
+          notes = 'Data as described in text. Regression uses data from 2017.',
+          order = c(4,2,1,3))
 
 ##Distribution of forest age by frequency and viterbi for 2017
 landUse2017 <- rbindlist(lapply(carbonStockFiles,  function(x) readRDS(x)$landuse[year==2017,-1]),idcol = 'windowid',fill=TRUE)
