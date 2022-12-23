@@ -67,11 +67,12 @@ meltTrendDat[,measurement := factor(measurement,levels = c('deforestation_rate',
 meltTrendDatGraph <- meltTrendDat[,list(value=weighted.mean(value,weights)),
                                   by = list(year,estimator,measurement)]
 
-ggplot(meltTrendDatGraph[measurement!='reforestation_rateAP' & estimator !='md'],aes(y=value, x= year, color = estimator ))+geom_point()+
-    stat_smooth() +
+ggplot(meltTrendDatGraph[measurement!='reforestation_rateAP' & estimator !='md'],aes(y=value, x= year, linetype = estimator,shape=estimator ))+geom_point(size = 3)+
+    stat_smooth(color = 'black') +
     theme_bw() +
     scale_y_continuous('Rate', labels = percent) +
-    scale_color_manual('Estimator',values = cbPalette,breaks = c('ml','freq'),labels = c('HMM','Raw'))+
+    scale_shape('Estimator',breaks = c('ml','freq'),labels = c('HMM','Raw'))+
+    scale_linetype('Estimator',breaks = c('ml','freq'),labels = c('HMM','Raw'))+
     facet_grid(measurement~., scales='free_y',
                labeller = as_labeller(c('deforestation_rate' = 'Deforestation Rate','fraction_forest' = 'Fraction Forest','reforestation_rate' = 'Reforestation Rate'))) +
     labs(caption = 'Points reflect the HMM parameters aggregated over all of the tiles\n(where the tile-specific deforestation rates are weighted by the fraction forest and the reforestation\nrates are weighted by the fraction not-forest.) Lines reflect a Loess trend.')+
