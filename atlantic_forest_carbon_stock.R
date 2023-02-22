@@ -75,7 +75,6 @@ ggplot(meltTrendDatGraph[measurement!='reforestation_rateAP' & estimator !='md']
     scale_linetype('Estimator',breaks = c('ml','freq'),labels = c('HMM','Raw'))+
     facet_grid(measurement~., scales='free_y',
                labeller = as_labeller(c('deforestation_rate' = 'Deforestation Rate','fraction_forest' = 'Fraction Forest','reforestation_rate' = 'Reforestation Rate'))) +
-    labs(caption = 'Points reflect the HMM parameters aggregated over all of the tiles\n(where the tile-specific deforestation rates are weighted by the fraction forest and the reforestation\nrates are weighted by the fraction not-forest.) Lines reflect a Loess trend.')+
     theme(plot.caption=element_text(hjust=0))
 ggsave('forest_trends_over_time.png')
 
